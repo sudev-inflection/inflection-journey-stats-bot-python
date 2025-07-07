@@ -69,4 +69,14 @@ tests/
 
 # Temporary files
 *.tmp
-*.temp 
+*.temp
+
+# Railway specific
+railway.toml
+railway-docker.toml
+nixpacks.toml
+Procfile
+
+# Docker
+Dockerfile
+.dockerignore 
