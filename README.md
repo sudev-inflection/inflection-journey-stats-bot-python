@@ -1,190 +1,109 @@
-# Inflection.io MCP Server
+# Inflection.io MCP Server (Simplified)
 
-A Model Context Protocol (MCP) server for Inflection.io marketing automation platform. This server provides AI assistants with access to email marketing analytics and journey data through a standardized interface.
+A simplified Model Context Protocol (MCP) server for Inflection.io marketing automation platform, built following a working pattern for Claude Desktop integration.
 
 ## Features
 
-- 🔐 **Authentication**: Secure login with Inflection.io credentials
-- 📊 **Journey Management**: List and filter marketing journeys
-- 📈 **Email Analytics**: Get detailed email performance reports
-- 🚀 **Async Operations**: Built with async/await for optimal performance
-- 🛡️ **Type Safety**: Full type hints and Pydantic validation
-- 📝 **Structured Logging**: Comprehensive logging with structlog
+- **Authentication**: Automatic login using environment variables
+- **Journey Management**: List and search marketing journeys
+- **Email Analytics**: Get comprehensive email performance reports
+- **Token Management**: Automatic token refresh and expiration handling
+- **Structured Logging**: Comprehensive logging with structlog
 
 ## Quick Start
 
 ### 1. Install Dependencies
 
 ```bash
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install package
-pip install -e .
+pip install -r requirements.txt
 ```
 
-### 2. Configure Environment
+### 2. Configure Environment Variables
 
-Copy the example environment file and add your credentials:
+Copy the example environment file and update with your credentials:
 
 ```bash
 cp env.example .env
 ```
 
-Edit `.env` with your Inflection.io credentials:
-
-```env
-INFLECTION_EMAIL=your-email@example.com
-INFLECTION_PASSWORD=your-password
-INFLECTION_API_URL=https://api.inflection.io
-```
-
-### 3. Test API Connection
-
-Before running the MCP server, test your API connection:
+Edit `.env` and add your Inflection.io credentials:
 
 ```bash
-python test_api.py
+INFLECTION_EMAIL=your_email@inflection.io
+INFLECTION_PASSWORD=your_password
 ```
 
-This will:
-- Test authentication with your credentials
-- Fetch sample journey data
-- Get email reports for a test journey
-- Save response examples to `examples/` directory
+### 3. Test the Server
 
-### 4. Run MCP Server
+Run the test script to verify everything works:
 
 ```bash
-python -m src.server
+python test_new_server.py
+```
+
+### 4. Start the MCP Server
+
+```bash
+python src/server_new.py
 ```
 
 ## MCP Tools
 
-### 1. `inflection_login`
+### 1. `list_journeys`
 
-Authenticate with Inflection.io using email and password.
+List all marketing journeys from your Inflection.io account.
 
-**Input:**
-- `email` (string): User's email address
-- `password` (string): User's password
-
-**Example:**
-```json
-{
-  "email": "user@example.com",
-  "password": "secure-password"
-}
-```
-
-### 2. `list_journeys`
-
-List available marketing journeys with optional filtering.
-
-**Input:**
-- `status_filter` (optional string): Filter by status ('active', 'draft', 'paused')
-- `limit` (optional integer): Limit number of results (max 100)
+**Parameters:**
+- `page_size` (optional): Number of journeys per page (default: 30, max: 100)
+- `page_number` (optional): Page number to retrieve (default: 1)
+- `search_keyword` (optional): Search keyword to filter journeys by name
 
 **Example:**
 ```json
 {
-  "status_filter": "active",
-  "limit": 10
+  "page_size": 10,
+  "page_number": 1,
+  "search_keyword": "onboarding"
 }
 ```
 
-### 3. `get_email_reports`
+### 2. `get_email_reports`
 
-Get email performance reports for a specific journey.
+Get comprehensive email performance reports for a specific journey.
 
-**Input:**
-- `journey_id` (string): Journey ID to get reports for
-- `start_date` (optional string): Start date filter (YYYY-MM-DD)
-- `end_date` (optional string): End date filter (YYYY-MM-DD)
-- `limit` (optional integer): Limit number of reports (max 50)
+**Parameters:**
+- `journey_id` (required): The ID of the journey to get reports for
+- `start_date` (optional): Start date for the report period (YYYY-MM-DD format)
+- `end_date` (optional): End date for the report period (YYYY-MM-DD format)
 
 **Example:**
 ```json
 {
-  "journey_id": "journey_123",
-  "start_date": "2024-01-01",
-  "end_date": "2024-01-31",
-  "limit": 20
+  "journey_id": "67b9bd0a699f2660099ae910",
+  "start_date": "2025-01-01",
+  "end_date": "2025-12-31"
 }
 ```
 
-## Project Structure
+## Authentication
 
-```
-src/
-├── __init__.py
-├── server.py              # Main MCP server entry point
-├── auth/
-│   ├── __init__.py
-│   └── inflection.py      # Authentication handling
-├── tools/
-│   ├── __init__.py
-│   ├── login.py           # Login tool implementation
-│   ├── journeys.py        # Journey listing tool
-│   └── reports.py         # Email reports tool
-├── utils/
-│   ├── __init__.py
-│   ├── api_client.py      # HTTP client utilities
-│   └── validation.py      # Input validation helpers
-├── models/
-│   ├── __init__.py
-│   ├── auth.py            # Authentication models
-│   ├── journey.py         # Journey data models
-│   └── report.py          # Report data models
-└── config/
-    ├── __init__.py
-    └── settings.py        # Configuration and constants
-```
+The server uses environment variables for authentication:
 
-## Development
+- `INFLECTION_EMAIL`: Your Inflection.io account email
+- `INFLECTION_PASSWORD`: Your Inflection.io account password
 
-### Setup Development Environment
+The server automatically:
+- Logs in using these credentials on startup
+- Refreshes tokens when they expire
+- Handles authentication errors gracefully
 
-```bash
-# Install development dependencies
-pip install -e ".[dev]"
+## API Endpoints
 
-# Install pre-commit hooks
-pre-commit install
-```
+The server integrates with multiple Inflection.io API endpoints:
 
-### Code Quality
-
-```bash
-# Format code
-black src/ tests/
-
-# Sort imports
-isort src/ tests/
-
-# Type checking
-mypy src/
-
-# Linting
-flake8 src/ tests/
-
-# Run tests
-pytest
-```
-
-### Testing
-
-```bash
-# Run API tests
-python test_api.py
-
-# Run unit tests
-pytest tests/
-
-# Run with coverage
-pytest --cov=src tests/
-```
+- **Auth API**: `https://auth.inflection.io/api/v1`
+- **Campaign API v2**: `https://campaign.inflection.io/api/v2`
+- **Campaign API v3**: `https://campaign.inflection.io/api/v3`
 
 ## Configuration
 
@@ -192,92 +111,90 @@ pytest --cov=src tests/
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `INFLECTION_API_URL` | Inflection.io API base URL | `https://api.inflection.io` |
-| `INFLECTION_EMAIL` | User email for authentication | Required |
-| `INFLECTION_PASSWORD` | User password for authentication | Required |
-| `INFLECTION_TEST_JOURNEY_ID` | Test journey ID for API testing | `test-journey-123` |
+| `INFLECTION_EMAIL` | Your Inflection.io email | Required |
+| `INFLECTION_PASSWORD` | Your Inflection.io password | Required |
+| `INFLECTION_API_BASE_URL_AUTH` | Auth API base URL | `https://auth.inflection.io/api/v1` |
+| `INFLECTION_API_BASE_URL_CAMPAIGN` | Campaign API v2 base URL | `https://campaign.inflection.io/api/v2` |
+| `INFLECTION_API_BASE_URL_CAMPAIGN_V3` | Campaign API v3 base URL | `https://campaign.inflection.io/api/v3` |
 | `LOG_LEVEL` | Logging level | `INFO` |
-| `HTTP_TIMEOUT` | HTTP request timeout (seconds) | `30` |
-| `MAX_RETRIES` | Maximum HTTP retries | `3` |
-
-### Logging
-
-The server uses structured logging with JSON output. Log levels:
-
-- `DEBUG`: Detailed debugging information
-- `INFO`: General operational messages
-- `WARNING`: Warning messages
-- `ERROR`: Error messages
 
 ## Error Handling
 
 The server includes comprehensive error handling:
 
-- **Authentication Errors**: Clear messages for login failures
-- **API Errors**: Proper HTTP error handling with retries
-- **Validation Errors**: Input validation with helpful messages
+- **Authentication Errors**: Clear messages when login fails
+- **API Errors**: Graceful handling of API failures
 - **Network Errors**: Timeout and connection error handling
+- **Validation Errors**: Input validation with helpful messages
 
-## Security Considerations
+## Logging
 
-- JWT tokens are stored in memory only (not persisted)
-- Passwords are never logged
-- All API requests use HTTPS
-- Input validation prevents injection attacks
-- Rate limiting prevents abuse
+The server uses structured logging with `structlog`:
 
-## API Integration
+- **Log Level**: Configurable via `LOG_LEVEL` environment variable
+- **Structured Output**: JSON-formatted logs for easy parsing
+- **Context**: Request IDs and operation tracking
+- **Security**: No sensitive data logged (passwords, tokens)
 
-The server integrates with Inflection.io APIs:
+## Development
 
-1. **Authentication**: `/auth/login` - JWT token-based auth
-2. **Journeys**: `/journeys` - List marketing journeys
-3. **Reports**: `/journeys/{id}/reports` - Email performance data
+### Running Tests
+
+```bash
+python test_new_server.py
+```
+
+### Code Structure
+
+```
+src/
+├── server_new.py          # Main MCP server (simplified)
+├── auth/                  # Authentication modules
+├── tools/                 # MCP tool implementations
+├── models/                # Data models
+├── utils/                 # Utility functions
+└── config/                # Configuration settings
+```
+
+### Adding New Tools
+
+1. Create a new tool function in `server_new.py`
+2. Add the tool to the `tools` list
+3. Add a handler in `handle_call_tool`
+4. Update the API client if needed
 
 ## Troubleshooting
 
 ### Common Issues
 
 1. **Authentication Failed**
-   - Verify email and password in `.env`
-   - Check API URL is correct
-   - Ensure account has API access
+   - Verify your email and password in `.env`
+   - Check that your Inflection.io account is active
 
-2. **API Timeout**
-   - Increase `HTTP_TIMEOUT` in settings
-   - Check network connectivity
-   - Verify API endpoint availability
+2. **API Errors**
+   - Check your internet connection
+   - Verify the API endpoints are accessible
+   - Check the logs for detailed error messages
 
-3. **Invalid Journey ID**
-   - Use `list_journeys` to get valid journey IDs
-   - Check journey ID format (alphanumeric with hyphens/underscores)
+3. **Token Expiration**
+   - The server should automatically refresh tokens
+   - If issues persist, restart the server
 
 ### Debug Mode
 
-Enable debug logging:
+Set `LOG_LEVEL=DEBUG` in your `.env` file for detailed logging:
 
 ```bash
-LOG_LEVEL=DEBUG python -m src.server
+LOG_LEVEL=DEBUG
 ```
 
-## Contributing
+## Security Considerations
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests
-5. Run code quality checks
-6. Submit a pull request
+- **Environment Variables**: Never commit `.env` files to version control
+- **Token Storage**: Tokens are stored in memory only, not persisted
+- **Logging**: No sensitive data is logged
+- **HTTPS**: All API calls use HTTPS
 
 ## License
 
-MIT License - see LICENSE file for details.
-
-## Support
-
-For issues and questions:
-
-1. Check the troubleshooting section
-2. Review API documentation
-3. Open an issue on GitHub
-4. Contact the development team 
+This project is licensed under the MIT License. 
