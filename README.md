@@ -9,6 +9,10 @@ A simplified Model Context Protocol (MCP) server for Inflection.io marketing aut
 - **Email Analytics**: Get comprehensive email performance reports
 - **Token Management**: Automatic token refresh and expiration handling
 - **Structured Logging**: Comprehensive logging with structlog
+- **Web Server**: HTTP endpoints for standalone deployment
+- **Railway Deployment**: Ready for cloud deployment on Railway.app
+- **SSE Support**: Real-time Server-Sent Events for n8n integration
+- **n8n Integration**: Ready for workflow automation
 
 ## Quick Start
 
@@ -45,6 +49,77 @@ python test_new_server.py
 
 ```bash
 python src/server_new.py
+```
+
+## Railway Deployment
+
+This server can be deployed as a standalone web service on Railway.app. See [RAILWAY_DEPLOYMENT.md](RAILWAY_DEPLOYMENT.md) for detailed deployment instructions.
+
+### Quick Railway Deployment
+
+1. **Connect to Railway**: Go to [Railway.app](https://railway.app) and create a new project from your GitHub repository
+
+2. **Set Environment Variables**: Add these required variables in Railway dashboard:
+   ```bash
+   INFLECTION_EMAIL=your_email@inflection.io
+   INFLECTION_PASSWORD=your_password
+   ```
+
+3. **Deploy**: Railway will automatically deploy using the configuration files
+
+4. **Test**: Your server will be available at `https://your-app-name.railway.app`
+
+### Web Server Endpoints
+
+When deployed, the server provides these HTTP endpoints:
+
+- `GET /health` - Health check and authentication status
+- `GET /tools` - List available MCP tools
+- `POST /journeys` - List marketing journeys
+- `POST /reports` - Get email reports for a journey
+- `POST /mcp` - Full MCP protocol endpoint
+- `GET /sse` - SSE information
+- `GET /sse/events` - Real-time SSE updates
+- `POST /sse/trigger` - Trigger SSE events
+
+### Local Web Server Testing
+
+To test the web server locally before deployment:
+
+```bash
+# Start the web server
+python web_server.py
+
+# In another terminal, run tests
+python test_web_server.py
+```
+
+## n8n Integration with SSE
+
+This server supports real-time integration with n8n using Server-Sent Events (SSE). See [N8N_INTEGRATION.md](N8N_INTEGRATION.md) for complete integration guide.
+
+### Quick n8n Setup
+
+1. **Deploy to Railway** using the instructions above
+2. **In n8n**, add a Webhook node with URL: `https://your-app.railway.app/sse/events`
+3. **Configure** the webhook to handle SSE events
+4. **Create workflows** that respond to real-time updates
+
+### Available SSE Events
+
+- `journey_update` - Real-time journey status updates (every 5 minutes)
+- `health_check` - Server health status (every minute)
+- `error` - Error notifications
+- `connection` - Connection establishment
+
+### Testing SSE Locally
+
+```bash
+# Test SSE functionality
+python test_sse.py
+
+# Test deployment readiness
+python deploy_test.py
 ```
 
 ## MCP Tools

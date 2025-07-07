@@ -1,3 +1,4 @@
+aiohttp==3.10.11
 annotated-types==0.7.0
 anyio==4.9.0
 attrs==25.3.0
@@ -6,6 +7,7 @@ certifi==2025.6.15
 cfgv==3.4.0
 click==8.2.1
 distlib==0.3.9
+fastapi==0.115.6
 filelock==3.18.0
 flake8==7.3.0
 h11==0.16.0
