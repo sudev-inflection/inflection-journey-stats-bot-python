@@ -4,7 +4,7 @@ import asyncio
 import os
 import json
 from typing import Any, Dict, List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import httpx
 import structlog
@@ -18,6 +18,17 @@ from mcp.types import (
     Tool,
 )
 import mcp.server.stdio
+import sys
+import pytz
+
+# Load environment variables from .env file if it exists
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+except Exception as e:
+    print(f"DEBUG: Error loading .env file: {e}", file=sys.stderr)
 
 # Configure structured logging
 structlog.configure(
@@ -58,6 +69,8 @@ auth_state = {
     "is_authenticated": False
 }
 
+print("DEBUG: server_new.py loaded!", file=sys.stderr)
+
 
 class InflectionAPIClient:
     """HTTP client for Inflection.io API with authentication handling."""
@@ -95,23 +108,30 @@ class InflectionAPIClient:
             "email": email,
             "password": password
         }
+        try:
+            response = await self.auth_client.post("/accounts/login", json=payload)
+            response.raise_for_status()
+            data = response.json()
 
-        response = await self.auth_client.post("/accounts/login", json=payload)
-        response.raise_for_status()
+            # Update global auth state
+            auth_state["access_token"] = data["session"]["access_token"]
+            auth_state["refresh_token"] = data["session"]["refresh_token"]
+            auth_state["expires_at"] = data["session"]["access_expires_at"]
+            auth_state["is_authenticated"] = True
 
-        data = response.json()
+            # Update client headers
+            self._update_auth_headers()
 
-        # Update global auth state
-        auth_state["access_token"] = data["session"]["access_token"]
-        auth_state["refresh_token"] = data["session"]["refresh_token"]
-        auth_state["expires_at"] = data["session"]["access_expires_at"]
-        auth_state["is_authenticated"] = True
-
-        # Update client headers
-        self._update_auth_headers()
-
-        logger.info("Login successful", user_id=data["account"]["id"])
-        return data
+            logger.info("Login successful", user_id=data["account"]["id"])
+            return data
+        except Exception as e:
+            # Clear auth state on failure
+            auth_state["access_token"] = None
+            auth_state["refresh_token"] = None
+            auth_state["expires_at"] = None
+            auth_state["is_authenticated"] = False
+            logger.error("Login failed", error=str(e))
+            raise
 
     def _update_auth_headers(self):
         """Update authentication headers for all clients."""
@@ -138,31 +158,40 @@ class InflectionAPIClient:
         if auth_state["is_authenticated"] and not self.is_token_expired():
             return True
 
-        # Try to login with environment variables
-        if INFLECTION_EMAIL and INFLECTION_PASSWORD:
-            try:
-                await self.login(INFLECTION_EMAIL, INFLECTION_PASSWORD)
-                return True
-            except Exception as e:
-                logger.error(
-                    "Failed to authenticate with environment variables", error=str(e))
+        # Check for missing credentials
+        if not INFLECTION_EMAIL or not INFLECTION_PASSWORD:
+            logger.error(
+                "Missing credentials: INFLECTION_EMAIL and/or INFLECTION_PASSWORD not set in environment"
+            )
+            return False
 
-        return False
+        # Try to login with environment variables
+        try:
+            await self.login(INFLECTION_EMAIL, INFLECTION_PASSWORD)
+            return True
+        except Exception as e:
+            logger.error(
+                "Failed to authenticate with environment variables", error=str(e)
+            )
+            return False
 
     async def get_journeys(self, page_size: int = 30, page_number: int = 1, search_keyword: str = "") -> Dict[str, Any]:
         """Get list of marketing journeys."""
         if not await self.ensure_authenticated():
             raise ValueError("Authentication required")
 
-        params = {
+        payload = {
             "page_size": page_size,
-            "page_number": page_number
+            "page_number": page_number,
+            "query": {
+                "search": {
+                    "keyword": search_keyword,
+                    "fields": ["name"]
+                }
+            }
         }
 
-        if search_keyword:
-            params["search_keyword"] = search_keyword
-
-        response = await self.campaign_client.get("/campaigns/campaign.list", params=params)
+        response = await self.campaign_client.post("/campaigns/campaign.list", json=payload)
         response.raise_for_status()
 
         return response.json()
@@ -172,41 +201,70 @@ class InflectionAPIClient:
         if not await self.ensure_authenticated():
             raise ValueError("Authentication required")
 
-        # Get aggregate stats
-        params = {"campaign_id": journey_id}
-        if start_date:
-            params["start_date"] = start_date
-        if end_date:
-            params["end_date"] = end_date
+        # Always use v2 for these endpoints
+        v2_base = "https://campaign.inflection.io/api/v2"
+        v3_base = "https://campaign.inflection.io/api/v3"
+        headers = self.campaign_client.headers.copy()
+        timeout = 30.0
 
-        response = await self.campaign_client.get("/campaigns/reports/stats.aggregate", params=params)
-        response.raise_for_status()
+        # Default to last 30 days if not provided, format as ISO 8601 with timezone, no microseconds
+        # Use your local timezone or UTC if preferred
+        tz = pytz.timezone("Asia/Kolkata")
+        now = datetime.now(tz)
+        if not end_date:
+            end_date = now.replace(microsecond=0).isoformat()
+        else:
+            try:
+                end_date = datetime.fromisoformat(
+                    end_date).replace(microsecond=0).isoformat()
+            except Exception:
+                pass
+        if not start_date:
+            start_date = (now - timedelta(days=30)
+                          ).replace(microsecond=0).isoformat()
+        else:
+            try:
+                start_date = datetime.fromisoformat(
+                    start_date).replace(microsecond=0).isoformat()
+            except Exception:
+                pass
 
-        aggregate_stats = response.json()
+        # Prepare params for POST endpoints, ensure no nulls
+        params = {
+            "campaign_id": journey_id,
+            "start_date": start_date,
+            "end_date": end_date
+        }
 
-        # Get recipient engagement stats
-        response = await self.campaign_client.get("/campaigns/reports/stats.recipient_engagement", params=params)
-        response.raise_for_status()
+        print("DEBUG: Payload for stats.aggregate:",
+              json.dumps(params), file=sys.stderr)
+        print("DEBUG: Headers:", headers, file=sys.stderr)
 
-        engagement_stats = response.json()
+        async with httpx.AsyncClient(timeout=timeout, headers=headers) as client:
+            # Aggregate stats (POST)
+            resp_agg = await client.post(f"{v2_base}/campaigns/reports/stats.aggregate", json=params)
+            resp_agg.raise_for_status()
+            aggregate_stats = resp_agg.json()
 
-        # Get top link stats
-        response = await self.campaign_client.get("/campaigns/reports/stats.top_link", params=params)
-        response.raise_for_status()
+            # Recipient engagement stats (POST)
+            resp_eng = await client.post(f"{v2_base}/campaigns/reports/stats.recipient_engagement", json=params)
+            resp_eng.raise_for_status()
+            engagement_stats = resp_eng.json()
 
-        link_stats = response.json()
+            # Top link stats (POST)
+            resp_link = await client.post(f"{v2_base}/campaigns/reports/stats.top_link", json=params)
+            resp_link.raise_for_status()
+            link_stats = resp_link.json()
 
-        # Get bounce stats (v3 API)
-        v3_params = {"campaign_id": journey_id}
-        if start_date:
-            v3_params["start_date"] = start_date
-        if end_date:
-            v3_params["end_date"] = end_date
+        # Bounce stats (v3, GET)
+        v3_params = {"view": "aggregate", "group_by": "bounce_classification",
+                     "event": "bounce", "start_date": start_date, "end_date": end_date}
 
         try:
-            response = await self.campaign_v3_client.get(f"/campaigns/{journey_id}/stats", params=v3_params)
-            response.raise_for_status()
-            bounce_stats = response.json()
+            async with httpx.AsyncClient(timeout=timeout, headers=headers) as client:
+                resp_bounce = await client.get(f"{v3_base}/campaigns/{journey_id}/stats", params=v3_params)
+                resp_bounce.raise_for_status()
+                bounce_stats = resp_bounce.json()
         except Exception as e:
             logger.warning("Failed to get bounce stats", error=str(e))
             bounce_stats = {"stats": {}}
@@ -343,13 +401,16 @@ class InflectionMCPServer:
                 search_keyword=search_keyword
             )
 
-            # Parse journeys from response
-            journeys_data = response.get("records", [])
+            logger.info("Raw API journey response", response=response)
+            journeys_data = response.get("records")
 
-            if not journeys_data:
+            if not journeys_data or not isinstance(journeys_data, list):
+                # If the API response is not as expected, return the raw response for debugging
+                logger.warning(
+                    "API did not return 'records' as expected", raw_response=response)
                 return TextContent(
                     type="text",
-                    text="📭 No journeys found."
+                    text=f"❌ Unexpected API response. Could not find a list of journeys. Raw response: {json.dumps(response, indent=2)}"
                 )
 
             # Format journey list
@@ -385,18 +446,19 @@ class InflectionMCPServer:
 
             response_text = f"{summary}\n\n" + "\n\n".join(journey_list)
 
-            logger.info(
-                "Journeys listed successfully",
-                count=len(journeys_data),
-                page=page_number,
-                total_pages=total_pages,
-                total_count=total_count
-            )
+            logger.info("Formatted journey list for response",
+                        response_text=response_text)
 
             return TextContent(type="text", text=response_text)
 
         except ValueError as e:
             logger.error("Authentication error", error=str(e))
+            # Check for missing credentials
+            if not INFLECTION_EMAIL or not INFLECTION_PASSWORD:
+                return TextContent(
+                    type="text",
+                    text="❌ Authentication error: Please set INFLECTION_EMAIL and INFLECTION_PASSWORD environment variables and restart the server."
+                )
             return TextContent(
                 type="text",
                 text=f"❌ Authentication error: {str(e)}"
@@ -501,6 +563,12 @@ class InflectionMCPServer:
 
         except ValueError as e:
             logger.error("Authentication error", error=str(e))
+            # Check for missing credentials
+            if not INFLECTION_EMAIL or not INFLECTION_PASSWORD:
+                return TextContent(
+                    type="text",
+                    text="❌ Authentication error: Please set INFLECTION_EMAIL and INFLECTION_PASSWORD environment variables and restart the server."
+                )
             return TextContent(
                 type="text",
                 text=f"❌ Authentication error: {str(e)}"
@@ -530,11 +598,22 @@ async def main():
 
     @mcp_server.call_tool()
     async def call_tool_handler(name: str, arguments: dict):
-        # Convert the call_tool signature to match our handler
-        request = CallToolRequest(
-            params=CallToolRequest.Params(name=name, arguments=arguments))
-        result = await server.handle_call_tool(request)
-        return result.content
+        if name == "list_journeys":
+            content = await server.list_journeys(
+                page_size=arguments.get("page_size", 30),
+                page_number=arguments.get("page_number", 1),
+                search_keyword=arguments.get("search_keyword", "")
+            )
+            return [content]
+        elif name == "get_email_reports":
+            content = await server.get_email_reports(
+                journey_id=arguments.get("journey_id", ""),
+                start_date=arguments.get("start_date"),
+                end_date=arguments.get("end_date")
+            )
+            return [content]
+        else:
+            return [TextContent(type="text", text=f"❌ Unknown tool: {name}")]
 
     # Run server with stdio
     async with mcp.server.stdio.stdio_server() as (read_stream, write_stream):
