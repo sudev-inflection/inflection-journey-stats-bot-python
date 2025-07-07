@@ -1,0 +1,187 @@
+# Inflection.io MCP Server Development Rules (Python)
+
+## Project Overview
+Building an MCP (Model Context Protocol) server for Inflection.io marketing automation platform using Python. The server exposes email marketing analytics and journey data to AI assistants.
+
+## Core Architecture
+- **Framework**: Python with `mcp` package (official MCP Python SDK)
+- **Language**: Python 3.9+ with type hints
+- **HTTP Client**: `httpx` for async HTTP requests
+- **Authentication**: JWT tokens from Inflection.io login API
+- **APIs to integrate**: Login, Journey Listing, Email Reports
+
+## Code Style & Standards
+- Follow PEP 8 style guidelines
+- Use type hints for all function parameters and return types
+- Use `async`/`await` for all I/O operations
+- Prefer dataclasses or Pydantic models for data structures
+- Use descriptive variable names (e.g., `journey_id`, `email_reports` not `id`, `data`)
+- Add docstrings for all functions and classes
+- Use context managers for resource management
+- Handle exceptions gracefully with descriptive messages
+
+## Project Structure
+```
+src/
+├── __init__.py
+├── server.py          # Main MCP server entry point
+├── auth/
+│   ├── __init__.py
+│   └── inflection.py  # Authentication handling
+├── tools/
+│   ├── __init__.py
+│   ├── login.py       # Login tool implementation
+│   ├── journeys.py    # Journey listing tool
+│   └── reports.py     # Email reports tool
+├── utils/
+│   ├── __init__.py
+│   ├── api_client.py  # HTTP client utilities
+│   └── validation.py  # Input validation helpers
+├── models/
+│   ├── __init__.py
+│   ├── auth.py        # Authentication models
+│   ├── journey.py     # Journey data models
+│   └── report.py      # Report data models
+└── config/
+    ├── __init__.py
+    └── settings.py    # Configuration and constants
+```
+
+## MCP Tools to Implement
+1. **`inflection_login`**
+   - Input: email (str), password (str)
+   - Output: Success/failure message with authentication status
+   - Stores JWT token in server state
+
+2. **`list_journeys`**
+   - Input: None (uses stored auth)
+   - Output: List of journey objects with id, name, status, metadata
+
+3. **`get_email_reports`**
+   - Input: journey_id (str), filters (Optional[dict])
+   - Output: Email performance metrics (opens, clicks, bounces, unsubscribes)
+
+## Required Dependencies
+- `mcp` - Official MCP Python SDK
+- `httpx` - Async HTTP client
+- `pydantic` - Data validation and settings
+- `python-dotenv` - Environment variable loading
+- `structlog` - Structured logging
+
+## Error Handling Requirements
+- Use custom exception classes inheriting from `Exception`
+- Always check for authentication before API calls
+- Provide clear error messages for:
+  - Authentication failures (`AuthenticationError`)
+  - Invalid journey IDs (`InvalidJourneyError`)
+  - API rate limits (`RateLimitError`)
+  - Network errors (`NetworkError`)
+- Never expose sensitive data in error messages
+- Log errors with structured logging
+
+## API Integration Guidelines
+- Store JWT token in server instance (not persistent storage)
+- Use `httpx.AsyncClient` with proper timeout configuration
+- Include `Authorization: Bearer <token>` header for authenticated requests
+- Implement request timeout (10 seconds default)
+- Add User-Agent header identifying the MCP server
+- Use structured logging for API requests/responses (sanitize sensitive data)
+- Handle token expiration with automatic re-authentication
+
+## Authentication Flow
+- Create AuthState class to manage JWT token and expiration
+- Implement token validation methods
+- Handle automatic re-authentication on token expiry
+- Store authentication state in server instance
+
+## Data Models
+- Use Pydantic models for all data structures
+- Define models for Journey, EmailReport, and authentication responses
+- Include proper type hints and validation
+- Handle optional fields and default values appropriately
+
+## Logging Configuration
+- Use `structlog` for structured logging
+- Log levels: DEBUG, INFO, WARNING, ERROR
+- Include request_id for tracing
+- Never log JWT tokens or passwords
+- Log API call duration and status codes
+
+## Testing Strategy
+- Create `test_api.py` script to validate API endpoints before MCP implementation
+- Use `pytest` for unit testing
+- Test authentication flow first
+- Validate response schemas with Pydantic
+- Test error scenarios (invalid credentials, expired tokens)
+- Use mock responses for development testing
+
+## Security Considerations
+- Never log JWT tokens or passwords
+- Clear stored tokens on authentication errors
+- Validate all inputs using Pydantic models
+- Use HTTPS for all API requests
+- Handle token expiration gracefully
+- Implement rate limiting to prevent abuse
+
+## Development Workflow
+1. Create API testing script to understand response formats
+2. Define Pydantic models based on API responses
+3. Implement authentication module
+4. Build individual MCP tools
+5. Test each tool independently
+6. Integrate into main MCP server
+7. End-to-end testing with real API
+
+## MCP Server Implementation Pattern
+- Use the official MCP Python SDK with async patterns
+- Implement proper tool registration with input schemas
+- Handle tool calls with type-safe argument parsing
+- Return structured TextContent responses
+
+## Configuration Management
+- Use `pydantic-settings` for configuration
+- Support environment variables with `.env` file
+- Include example `.env.example` file
+- Configuration for different environments (dev, staging, prod)
+
+## Performance Considerations
+- Use `httpx.AsyncClient` with connection pooling
+- Cache journey list for 5 minutes using `functools.lru_cache`
+- Implement basic rate limiting (max 10 requests per minute)
+- Use async/await throughout for non-blocking operations
+- Add request timeouts to prevent hanging
+
+## Code Quality Tools
+- `black` for code formatting
+- `isort` for import sorting
+- `mypy` for type checking
+- `flake8` for linting
+- `pytest` for testing
+
+## Documentation Requirements
+- README.md with setup instructions
+- API endpoint documentation
+- MCP tool usage examples
+- Error code reference
+- Development setup guide
+- Type hints and docstrings for all public functions
+
+## Environment Setup
+- Create virtual environment and install dependencies
+- Set up development dependencies for testing and linting
+- Configure environment variables and settings
+- Include example environment file
+
+## Naming Conventions
+- Files: snake_case (e.g., `email_reports.py`)
+- Functions: snake_case (e.g., `get_email_reports`)
+- Classes: PascalCase (e.g., `EmailReportService`)
+- Constants: SCREAMING_SNAKE_CASE (e.g., `API_BASE_URL`)
+- MCP tool names: snake_case (e.g., `get_email_reports`)
+
+## Async Best Practices
+- Use `async with` for HTTP client sessions
+- Implement proper exception handling in async functions
+- Use `asyncio.gather()` for concurrent operations when appropriate
+- Always use `await` for async operations
+- Handle `asyncio.TimeoutError` appropriately

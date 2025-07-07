@@ -1,0 +1,15 @@
+{
+    "mcpServers": {
+        "inflection-mcp-server": {
+            "command": "python",
+            "args": [
+                "run_server.py"
+            ],
+            "cwd": "/Users/sudev/Documents/project/inflection_copilot_python",
+            "env": {
+                "INFLECTION_EMAIL": "your_email@inflection.io",
+                "INFLECTION_PASSWORD": "your_password"
+            }
+        }
+    }
+}
