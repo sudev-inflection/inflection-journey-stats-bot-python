@@ -382,6 +382,78 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 
+@app.get("/sse")
+async def sse_info():
+    """SSE endpoint information."""
+    return {
+        "sse_endpoint": "/sse/events",
+        "supported_events": [
+            "journey_update",
+            "email_report",
+            "health_check",
+            "error"
+        ],
+        "connection_count": len(sse_connections),
+        "usage": "Connect to /sse/events to receive real-time updates"
+    }
+
+
+@app.get("/sse/events")
+async def sse_events():
+    """SSE endpoint for real-time updates."""
+    async def event_generator():
+        queue = asyncio.Queue()
+        sse_connections.append(queue)
+        try:
+            initial_data = {
+                "type": "connection_established",
+                "message": "SSE connection established",
+                "timestamp": datetime.utcnow().isoformat(),
+                "connection_id": str(uuid.uuid4())
+            }
+            await queue.put(f"event: connection\ndata: {json.dumps(initial_data)}\n\n")
+            while True:
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=30.0)
+                    yield event
+                except asyncio.TimeoutError:
+                    yield ": keepalive\n\n"
+        except Exception as e:
+            error_data = {
+                "type": "error",
+                "message": f"SSE connection error: {str(e)}",
+                "timestamp": datetime.utcnow().isoformat()
+            }
+            yield f"event: error\ndata: {json.dumps(error_data)}\n\n"
+        finally:
+            if queue in sse_connections:
+                sse_connections.remove(queue)
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Headers": "Cache-Control"
+        }
+    )
+
+
+@app.post("/sse/trigger")
+async def trigger_sse_event(request: SSEEventRequest, background_tasks: BackgroundTasks):
+    """Manually trigger an SSE event (for testing)."""
+    try:
+        await send_sse_event(request.event_type, request.data)
+        return {
+            "status": "success",
+            "message": f"Event '{request.event_type}' sent to {len(sse_connections)} clients",
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 def main():
     """Main function to run the server."""
     port = int(os.environ.get("PORT", 8000))
