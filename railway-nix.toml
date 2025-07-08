@@ -1,12 +1,13 @@
 [build]
-builder = "dockerfile"
+builder = "nixpacks"
 
 [deploy]
+startCommand = "source venv/bin/activate && python web_server.py"
 healthcheckPath = "/health"
 healthcheckTimeout = 300
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 10
 
 [env]
-PORT = "8000"
-HOST = "0.0.0.0" 
+PYTHON_VERSION = "3.11"
+PIP_USER = "false" 
