@@ -224,27 +224,7 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint for Railway."""
-    try:
-        # Test authentication
-        from src.server_new import InflectionAPIClient
-        async with InflectionAPIClient() as client:
-            is_authenticated = await client.ensure_authenticated()
-
-        return {
-            "status": "healthy",
-            "timestamp": datetime.utcnow().isoformat(),
-            "authentication": "ok" if is_authenticated else "failed"
-        }
-    except Exception as e:
-        return JSONResponse(
-            status_code=503,
-            content={
-                "status": "unhealthy",
-                "timestamp": datetime.utcnow().isoformat(),
-                "error": str(e)
-            }
-        )
+    return {"status": "healthy"}
 
 
 @app.get("/tools")
