@@ -179,3 +179,5 @@ examples/
 *.log
 .env.local
 .env.production 
+.env.slack
+fastagent.secrets.yaml
