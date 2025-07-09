@@ -1,1 +1,1 @@
-web: python web_server.py 
+web: uvicorn combined_server:combined_app --host 0.0.0.0 --port 8000 
