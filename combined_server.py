@@ -1,14 +1,14 @@
 from fastapi import FastAPI
-from web_server import app as mcp_app  # MCP FastAPI app
-from fastagent_slack_server import app as slack_app  # Slack bot FastAPI app
+# from web_server import app as mcp_app  # MCP FastAPI app
+# from fastagent_slack_server import app as slack_app  # Slack bot FastAPI app
 
 combined_app = FastAPI(title="Combined MCP + Slack Bot Server")
 
 # Mount the MCP server at /mcp
-combined_app.mount("/mcp", mcp_app)
+# combined_app.mount("/mcp", mcp_app)
 
-# Mount the Slack bot at /slack
-combined_app.mount("/slack", slack_app)
+# # Mount the Slack bot at /slack
+# combined_app.mount("/slack", slack_app)
 
 
 @combined_app.get("/")
