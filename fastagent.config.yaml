@@ -1,17 +1,17 @@
 # Fast-Agent Configuration
-# Set OpenAI as the default provider
+# Use the combined MCP + Slack bot server
 
 default_model: openai
 
 models:
   openai:
     provider: openai
-    model: gpt-4o-mini  # or gpt-4, gpt-3.5-turbo
+    model: gpt-4o
     temperature: 0.7
     max_tokens: 4000
 
 # MCP Server configuration
 mcp_servers:
   inflection:
-    url: http://localhost:8000
-    description: "Inflection.io marketing automation tools" 
+    url: http://localhost:8000/mcp/mcp
+    description: "Inflection.io marketing automation tools (Combined MCP + Slack bot server)" 
