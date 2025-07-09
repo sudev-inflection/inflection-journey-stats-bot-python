@@ -14,3 +14,8 @@ combined_app.mount("/slack", slack_app)
 @combined_app.get("/")
 async def root():
     return {"status": "ok", "message": "Combined MCP + Slack bot server running"}
+
+
+@combined_app.get("/health")
+async def health():
+    return {"status": "ok"}
