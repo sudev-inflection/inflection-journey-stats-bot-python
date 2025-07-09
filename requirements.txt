@@ -8,6 +8,7 @@ cfgv>=3.4.0
 click>=8.2.0
 distlib>=0.3.0
 fastapi>=0.100.0
+fast-agent-mcp
 filelock>=3.18.0
 flake8>=7.3.0
 h11>=0.16.0

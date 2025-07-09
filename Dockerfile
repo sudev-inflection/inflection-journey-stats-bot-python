@@ -14,8 +14,6 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1
 RUN apt-get update && apt-get install -y \
     gcc \
     curl \
-    nodejs \
-    npm \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
@@ -23,9 +21,6 @@ COPY requirements.txt .
 
 # Install Python dependencies directly (no virtual environment needed in Docker)
 RUN pip install --no-cache-dir -r requirements.txt
-
-# Install fast-agent CLI globally
-RUN npm install -g fast-agent
 
 # Copy application code
 COPY . .
