@@ -2,6 +2,8 @@ from fastapi import FastAPI
 # from web_server import app as mcp_app  # MCP FastAPI app
 # from fastagent_slack_server import app as slack_app  # Slack bot FastAPI app
 
+print("=== Starting combined_server.py ===")
+
 combined_app = FastAPI(title="Combined MCP + Slack Bot Server")
 
 # Mount the MCP server at /mcp
