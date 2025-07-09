@@ -14,6 +14,8 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1
 RUN apt-get update && apt-get install -y \
     gcc \
     curl \
+    nodejs \
+    npm \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
@@ -21,6 +23,9 @@ COPY requirements.txt .
 
 # Install Python dependencies directly (no virtual environment needed in Docker)
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Install fast-agent CLI globally
+RUN npm install -g fast-agent
 
 # Copy application code
 COPY . .
@@ -36,5 +41,5 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
-# Run the application directly (no virtual environment needed)
-CMD ["python", "web_server.py"] 
+# Run the combined FastAPI app
+CMD ["uvicorn", "combined_server:combined_app", "--host", "0.0.0.0", "--port", "8000"] 
