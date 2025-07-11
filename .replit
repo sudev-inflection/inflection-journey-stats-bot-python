@@ -1,9 +1,18 @@
 modules = ["python-3.12"]
-run = "uvicorn undefined:app --host 0.0.0.0 --port 8000"
+run = "python setup_replit.py && pip install -r requirements.txt && python combined_server.py"
 
 [nix]
 channel = "stable-24_05"
 packages = ["awsebcli", "cacert", "cargo", "glibcLocales", "libiconv", "libxcrypt", "rustc", "which"]
 
 [deployment]
-run = ["sh", "-c", "uvicorn undefined:app --host 0.0.0.0 --port 8000"]
+run = ["sh", "-c", "python setup_replit.py && pip install -r requirements.txt && python combined_server.py"]
+
+[env]
+PYTHONPATH = "."
+INFLECTION_API_BASE_URL_AUTH = "https://auth.inflection.io/api/v1"
+INFLECTION_API_BASE_URL_CAMPAIGN = "https://campaign.inflection.io/api/v2"
+INFLECTION_API_BASE_URL_CAMPAIGN_V3 = "https://campaign.inflection.io/api/v3"
+LOG_LEVEL = "INFO"
+API_TIMEOUT = "10000"
+MAX_REQUESTS_PER_MINUTE = "10"
