@@ -83,8 +83,21 @@ def test_imports():
     print("\n🧪 Testing imports...")
 
     try:
-        from src.server_new import InflectionMCPServer, InflectionAPIClient
-        print("✅ MCP server modules imported successfully!")
+        # Test basic imports first
+        import mcp
+        import httpx
+        import structlog
+        import fastapi
+        import uvicorn
+        print("✅ Core dependencies imported successfully!")
+
+        # Test MCP server modules
+        try:
+            from src.server_new import InflectionMCPServer, InflectionAPIClient
+            print("✅ MCP server modules imported successfully!")
+        except ImportError as e:
+            print(f"❌ MCP server import error: {e}")
+            return False
 
         # Try to import Slack bot modules (optional)
         try:
@@ -97,6 +110,7 @@ def test_imports():
         return True
     except ImportError as e:
         print(f"❌ Import error: {e}")
+        print("💡 Try running: pip install -r requirements.txt")
         return False
 
 
@@ -134,6 +148,10 @@ def main():
         return True
     else:
         print("\n❌ Setup incomplete. Please fix the issues above and try again.")
+        print("💡 If you're having dependency issues, try:")
+        print("   1. pip install -r requirements.txt")
+        print("   2. pip install rpds-py")
+        print("   3. Restart the repl")
         return False
 
 

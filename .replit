@@ -1,12 +1,12 @@
 modules = ["python-3.12"]
-run = "python setup_replit.py && pip install -r requirements.txt && python combined_server.py"
+run = "python setup_replit.py && pip install --no-cache-dir -r requirements.txt && python combined_server.py"
 
 [nix]
 channel = "stable-24_05"
 packages = ["awsebcli", "cacert", "cargo", "glibcLocales", "libiconv", "libxcrypt", "rustc", "which"]
 
 [deployment]
-run = ["sh", "-c", "python setup_replit.py && pip install -r requirements.txt && python combined_server.py"]
+run = ["sh", "-c", "python setup_replit.py && pip install --no-cache-dir -r requirements.txt && python combined_server.py"]
 
 [env]
 PYTHONPATH = "."
