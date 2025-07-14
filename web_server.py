@@ -288,18 +288,63 @@ async def mcp_info():
         "jsonrpc": "2.0",
         "id": "info",
         "result": {
-            "server": "inflection-mcp-server",
-            "version": "1.0.0",
-            "protocol": "MCP",
-            "endpoints": {
-                "post": "/mcp - MCP protocol requests",
-                "get": "/mcp - Server information (this endpoint)"
+            "protocolVersion": "2025-06-18",
+            "capabilities": {
+                "tools": {
+                    "list_journeys": {
+                        "description": "List all marketing journeys from Inflection.io",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "page_size": {
+                                    "type": "integer",
+                                    "description": "Number of journeys to return per page (default: 30, max: 100)",
+                                    "default": 30,
+                                    "minimum": 1,
+                                    "maximum": 100
+                                },
+                                "page_number": {
+                                    "type": "integer",
+                                    "description": "Page number to retrieve (default: 1)",
+                                    "default": 1,
+                                    "minimum": 1
+                                },
+                                "search_keyword": {
+                                    "type": "string",
+                                    "description": "Search keyword to filter journeys by name (optional)",
+                                    "default": ""
+                                }
+                            },
+                            "required": []
+                        }
+                    },
+                    "get_email_reports": {
+                        "description": "Get email performance reports for a specific journey",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "journey_id": {
+                                    "type": "string",
+                                    "description": "ID of the journey to get reports for"
+                                },
+                                "start_date": {
+                                    "type": "string",
+                                    "description": "Start date for the report period (YYYY-MM-DD format, optional)"
+                                },
+                                "end_date": {
+                                    "type": "string",
+                                    "description": "End date for the report period (YYYY-MM-DD format, optional)"
+                                }
+                            },
+                            "required": ["journey_id"]
+                        }
+                    }
+                }
             },
-            "tools": [
-                "list_journeys",
-                "get_email_reports"
-            ],
-            "status": "ready"
+            "serverInfo": {
+                "name": "inflection-mcp-server",
+                "version": "1.0.0"
+            }
         }
     }
 
