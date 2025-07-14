@@ -285,18 +285,22 @@ async def favicon():
 async def mcp_info():
     """MCP endpoint information for GET requests."""
     return {
-        "server": "inflection-mcp-server",
-        "version": "1.0.0",
-        "protocol": "MCP",
-        "endpoints": {
-            "post": "/mcp - MCP protocol requests",
-            "get": "/mcp - Server information (this endpoint)"
-        },
-        "tools": [
-            "list_journeys",
-            "get_email_reports"
-        ],
-        "status": "ready"
+        "jsonrpc": "2.0",
+        "id": "info",
+        "result": {
+            "server": "inflection-mcp-server",
+            "version": "1.0.0",
+            "protocol": "MCP",
+            "endpoints": {
+                "post": "/mcp - MCP protocol requests",
+                "get": "/mcp - Server information (this endpoint)"
+            },
+            "tools": [
+                "list_journeys",
+                "get_email_reports"
+            ],
+            "status": "ready"
+        }
     }
 
 
