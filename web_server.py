@@ -274,14 +274,53 @@ async def get_email_reports(request: EmailReportsRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/favicon.ico")
+async def favicon():
+    """Return a simple favicon response."""
+    from fastapi.responses import Response
+    return Response(content="", media_type="image/x-icon")
+
+
+@app.get("/mcp")
+async def mcp_info():
+    """MCP endpoint information for GET requests."""
+    return {
+        "server": "inflection-mcp-server",
+        "version": "1.0.0",
+        "protocol": "MCP",
+        "endpoints": {
+            "post": "/mcp - MCP protocol requests",
+            "get": "/mcp - Server information (this endpoint)"
+        },
+        "tools": [
+            "list_journeys",
+            "get_email_reports"
+        ],
+        "status": "ready"
+    }
+
+
 @app.post("/mcp")
-async def handle_mcp_request(request: MCPRequest):
+async def handle_mcp_request(request: Request):
     """Handle MCP protocol requests."""
     try:
-        if request.method == "initialize":
-            response = MCPResponse(
-                id=request.id,
-                result={
+        # Debug: Log the raw request
+        body = await request.body()
+        print(f"DEBUG: Received POST to /mcp")
+        print(f"DEBUG: Headers: {dict(request.headers)}")
+        print(f"DEBUG: Body: {body.decode('utf-8') if body else 'No body'}")
+        
+        # Try to parse as JSON
+        try:
+            request_data = await request.json()
+            print(f"DEBUG: Parsed JSON: {request_data}")
+        except Exception as e:
+            print(f"DEBUG: Failed to parse JSON: {e}")
+            # Return a basic response for non-JSON requests
+            return {
+                "jsonrpc": "2.0",
+                "id": "1",
+                "result": {
                     "protocolVersion": "2025-06-18",
                     "capabilities": {
                         "tools": {}
@@ -291,14 +330,38 @@ async def handle_mcp_request(request: MCPRequest):
                         "version": "1.0.0"
                     }
                 }
-            )
+            }
+        
+        # Continue with the original logic
+        method = request_data.get('method')
+        request_id = request_data.get('id')
+        params = request_data.get('params', {})
+
+        print(f"Handling MCP request: {method}")
+
+        if method == "initialize":
+            response = {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "result": {
+                    "protocolVersion": "2025-06-18",
+                    "capabilities": {
+                        "tools": {}
+                    },
+                    "serverInfo": {
+                        "name": "inflection-mcp-server",
+                        "version": "1.0.0"
+                    }
+                }
+            }
             return response
 
-        elif request.method == "tools/list":
+        elif method == "tools/list":
             tools = await mcp_server.handle_list_tools()
-            response = MCPResponse(
-                id=request.id,
-                result={
+            response = {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "result": {
                     "tools": [
                         {
                             "name": tool.name,
@@ -308,11 +371,10 @@ async def handle_mcp_request(request: MCPRequest):
                         for tool in tools
                     ]
                 }
-            )
+            }
             return response
 
-        elif request.method == "tools/call":
-            params = request.params or {}
+        elif method == "tools/call":
             tool_name = params.get("name")
             tool_args = params.get("arguments", {})
 
@@ -329,17 +391,19 @@ async def handle_mcp_request(request: MCPRequest):
                     end_date=tool_args.get("end_date")
                 )
             else:
-                return MCPResponse(
-                    id=request.id,
-                    error={
+                return {
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "error": {
                         "code": -32601,
                         "message": f"Method not found: {tool_name}"
                     }
-                )
+                }
 
-            response = MCPResponse(
-                id=request.id,
-                result={
+            response = {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "result": {
                     "content": [
                         {
                             "type": content.type,
@@ -347,26 +411,31 @@ async def handle_mcp_request(request: MCPRequest):
                         }
                     ]
                 }
-            )
+            }
             return response
 
         else:
-            return MCPResponse(
-                id=request.id,
-                error={
+            return {
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "error": {
                     "code": -32601,
-                    "message": f"Method not found: {request.method}"
+                    "message": f"Method not found: {method}"
                 }
-            )
+            }
 
     except Exception as e:
-        return MCPResponse(
-            id=request.id,
-            error={
+        print(f"DEBUG: Exception in handle_mcp_request: {e}")
+        import traceback
+        traceback.print_exc()
+        return {
+            "jsonrpc": "2.0",
+            "id": "1",
+            "error": {
                 "code": -32603,
                 "message": f"Internal error: {str(e)}"
             }
-        )
+        }
 
 
 @app.exception_handler(Exception)

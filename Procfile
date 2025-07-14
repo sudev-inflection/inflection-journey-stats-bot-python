@@ -1,1 +1,1 @@
-web: uvicorn combined_server:app --host 0.0.0.0 --port $PORT 
+web: python web_server.py --host 0.0.0.0 --port $PORT 
