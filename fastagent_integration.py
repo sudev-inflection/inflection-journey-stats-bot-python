@@ -76,18 +76,14 @@ mcp_servers:
     async def call_fastagent(self, message: str) -> str:
         """Call Fast-Agent with the given message."""
         try:
-            # Create config file
-            config_file = self.write_config_file(
-                self.create_fastagent_config())
-
             # Set environment variables for Fast-Agent
             env = os.environ.copy()
             env["OPENAI_API_KEY"] = self.openai_api_key
 
-            # Call Fast-Agent CLI
+            # Use the direct URL approach as the user mentioned
             cmd = [
                 "fast-agent", "go",
-                "--config", config_file,
+                "--url", f"{self.mcp_server_url}/mcp",
                 "--message", message
             ]
 
@@ -99,9 +95,6 @@ mcp_servers:
                 text=True,
                 timeout=60
             )
-
-            # Clean up config file
-            os.unlink(config_file)
 
             if result.returncode == 0:
                 return result.stdout.strip()

@@ -13,5 +13,5 @@ models:
 # MCP Server configuration
 mcp_servers:
   inflection:
-    url: http://localhost:8000/mcp/mcp
-    description: "Inflection.io marketing automation tools (Combined MCP + Slack bot server)" 
+    url: http://localhost:8000/
+#     description: "Inflection.io marketing automation tools (Combined MCP + Slack bot server)" 
