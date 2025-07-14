@@ -309,7 +309,7 @@ async def handle_mcp_request(request: Request):
         print(f"DEBUG: Received POST to /mcp")
         print(f"DEBUG: Headers: {dict(request.headers)}")
         print(f"DEBUG: Body: {body.decode('utf-8') if body else 'No body'}")
-        
+
         # Try to parse as JSON
         try:
             request_data = await request.json()
@@ -331,7 +331,7 @@ async def handle_mcp_request(request: Request):
                     }
                 }
             }
-        
+
         # Continue with the original logic
         method = request_data.get('method')
         request_id = request_data.get('id')
@@ -525,10 +525,17 @@ async def trigger_sse_event(request: SSEEventRequest, background_tasks: Backgrou
 
 def main():
     """Main function to run the server."""
-    port = int(os.environ.get("PORT", 8000))
-    host = os.environ.get("HOST", "0.0.0.0")
+    import argparse
 
-    print(f"🚀 Starting Inflection.io MCP Server on {host}:{port}")
+    parser = argparse.ArgumentParser(description="Run Inflection MCP server.")
+    parser.add_argument('--host', type=str, default=os.environ.get("HOST", "0.0.0.0"),
+                        help='Host to bind the server')
+    parser.add_argument('--port', type=int, default=int(os.environ.get("PORT", 8000)),
+                        help='Port to bind the server')
+
+    args = parser.parse_args()
+
+    print(f"🚀 Starting Inflection.io MCP Server on {args.host}:{args.port}")
     print("📋 Available endpoints:")
     print("   - GET  /health - Health check")
     print("   - GET  /tools - List available tools")
@@ -539,8 +546,8 @@ def main():
 
     uvicorn.run(
         "web_server:app",
-        host=host,
-        port=port,
+        host=args.host,
+        port=args.port,
         log_level="info",
         access_log=True
     )
