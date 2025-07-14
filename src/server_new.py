@@ -56,6 +56,8 @@ API_BASE_URL_AUTH = os.environ.get(
     "INFLECTION_API_BASE_URL_AUTH", "https://auth.inflection.io/api/v1")
 API_BASE_URL_CAMPAIGN = os.environ.get(
     "INFLECTION_API_BASE_URL_CAMPAIGN", "https://campaign.inflection.io/api/v2")
+API_BASE_URL_CAMPAIGN_V1 = os.environ.get(
+    "INFLECTION_API_BASE_URL_CAMPAIGN_V1", "https://campaign.inflection.io/api/v1")
 API_BASE_URL_CAMPAIGN_V3 = os.environ.get(
     "INFLECTION_API_BASE_URL_CAMPAIGN_V3", "https://campaign.inflection.io/api/v3")
 INFLECTION_EMAIL = os.environ.get("INFLECTION_EMAIL")
@@ -86,11 +88,20 @@ class InflectionAPIClient:
             headers={"Content-Type": "application/json"},
             timeout=30.0
         )
+        self.campaign_v1_client = httpx.AsyncClient(
+            base_url=API_BASE_URL_CAMPAIGN_V1,
+            headers={"Content-Type": "application/json"},
+            timeout=30.0
+        )
         self.campaign_v3_client = httpx.AsyncClient(
             base_url=API_BASE_URL_CAMPAIGN_V3,
             headers={"Content-Type": "application/json"},
             timeout=30.0
         )
+
+        # If we already have auth state, update headers immediately
+        if auth_state["access_token"]:
+            self._update_auth_headers()
 
     async def __aenter__(self):
         return self
@@ -98,6 +109,7 @@ class InflectionAPIClient:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.auth_client.aclose()
         await self.campaign_client.aclose()
+        await self.campaign_v1_client.aclose()
         await self.campaign_v3_client.aclose()
 
     async def login(self, email: str, password: str) -> Dict[str, Any]:
@@ -139,6 +151,7 @@ class InflectionAPIClient:
             auth_header = {
                 "Authorization": f"Bearer {auth_state['access_token']}"}
             self.campaign_client.headers.update(auth_header)
+            self.campaign_v1_client.headers.update(auth_header)
             self.campaign_v3_client.headers.update(auth_header)
 
     def is_token_expired(self) -> bool:
@@ -191,90 +204,144 @@ class InflectionAPIClient:
             }
         }
 
-        response = await self.campaign_client.post("/campaigns/campaign.list", json=payload)
+        response = await self.campaign_v1_client.post("/campaigns/campaign.list", json=payload)
         response.raise_for_status()
-
         return response.json()
 
     async def get_email_reports(self, journey_id: str, start_date: Optional[str] = None, end_date: Optional[str] = None) -> Dict[str, Any]:
-        """Get email reports for a specific journey."""
+        """Get comprehensive email reports for a specific journey using all endpoints from test_api.py."""
         if not await self.ensure_authenticated():
             raise ValueError("Authentication required")
 
-        # Always use v2 for these endpoints
-        v2_base = "https://campaign.inflection.io/api/v2"
-        v3_base = "https://campaign.inflection.io/api/v3"
         headers = self.campaign_client.headers.copy()
         timeout = 30.0
-
-        # Default to last 30 days if not provided, format as ISO 8601 with timezone, no microseconds
-        # Use your local timezone or UTC if preferred
         tz = pytz.timezone("Asia/Kolkata")
         now = datetime.now(tz)
         if not end_date:
             end_date = now.replace(microsecond=0).isoformat()
-        else:
-            try:
-                end_date = datetime.fromisoformat(
-                    end_date).replace(microsecond=0).isoformat()
-            except Exception:
-                pass
         if not start_date:
             start_date = (now - timedelta(days=30)
                           ).replace(microsecond=0).isoformat()
-        else:
-            try:
-                start_date = datetime.fromisoformat(
-                    start_date).replace(microsecond=0).isoformat()
-            except Exception:
-                pass
 
-        # Prepare params for POST endpoints, ensure no nulls
-        params = {
-            "campaign_id": journey_id,
-            "start_date": start_date,
-            "end_date": end_date
-        }
+        # Define all endpoints to call (matching test_api.py exactly)
+        endpoints_to_call = [
+            {
+                "name": "aggregate_stats",
+                "url": "https://campaign.inflection.io/api/v2/campaigns/reports/stats.aggregate",
+                "payload": {
+                    "campaign_id": journey_id,
+                    "start_date": start_date,
+                    "end_date": end_date
+                }
+            },
+            {
+                "name": "recipient_engagement",
+                "url": "https://campaign.inflection.io/api/v2/campaigns/reports/stats.recipient_engagement",
+                "payload": {
+                    "campaign_id": journey_id,
+                    "start_date": start_date,
+                    "end_date": end_date,
+                    "query": {
+                        "search": {
+                            "keyword": "",
+                            "fields": ["email", "name"]
+                        }
+                    },
+                    "page_number": 1,
+                    "page_size": 15
+                }
+            },
+            {
+                "name": "report_runs_list",
+                "url": "https://campaign.inflection.io/api/v2/campaigns/reports/runs.list",
+                "payload": {
+                    "campaign_id": journey_id,
+                    "start_date": start_date,
+                    "end_date": end_date,
+                    "page_number": 1,
+                    "page_size": 15,
+                    "show_non_empty_runs": False
+                }
+            },
+            {
+                "name": "top_email_client_click",
+                "url": "https://campaign.inflection.io/api/v2/campaigns/reports/stats.top_email_client.click",
+                "payload": {
+                    "campaign_id": journey_id,
+                    "start_date": start_date,
+                    "end_date": end_date,
+                    "page_number": 1,
+                    "page_size": 1000
+                }
+            },
+            {
+                "name": "top_email_client_open",
+                "url": "https://campaign.inflection.io/api/v2/campaigns/reports/stats.top_email_client.open",
+                "payload": {
+                    "campaign_id": journey_id,
+                    "start_date": start_date,
+                    "end_date": end_date,
+                    "page_number": 1,
+                    "page_size": 1000
+                }
+            },
+            {
+                "name": "top_link_stats",
+                "url": "https://campaign.inflection.io/api/v2/campaigns/reports/stats.top_link",
+                "payload": {
+                    "campaign_id": journey_id,
+                    "start_date": start_date,
+                    "end_date": end_date,
+                    "page_number": 1,
+                    "page_size": 5
+                }
+            }
+        ]
 
-        print("DEBUG: Payload for stats.aggregate:",
-              json.dumps(params), file=sys.stderr)
-        print("DEBUG: Headers:", headers, file=sys.stderr)
+        # V3 API endpoints (GET requests) - matching test_api.py exactly
+        v3_endpoints = [
+            {
+                "name": "bounce_stats",
+                "url": f"https://campaign.inflection.io/api/v3/campaigns/{journey_id}/stats?view=aggregate&group_by=bounce_classification&event=bounce&start_date={start_date.replace(':', '%3A').replace('+', '%2B')}&end_date={end_date.replace(':', '%3A').replace('+', '%2B')}"
+            },
+            {
+                "name": "bounce_classifications",
+                "url": "https://campaign.inflection.io/api/v3/campaigns/stats/bounce_classifications"
+            }
+        ]
+
+        results = {}
 
         async with httpx.AsyncClient(timeout=timeout, headers=headers) as client:
-            # Aggregate stats (POST)
-            resp_agg = await client.post(f"{v2_base}/campaigns/reports/stats.aggregate", json=params)
-            resp_agg.raise_for_status()
-            aggregate_stats = resp_agg.json()
+            # Call v2 endpoints (POST requests)
+            for endpoint in endpoints_to_call:
+                try:
+                    logger.info(f"Calling {endpoint['name']} endpoint")
+                    response = await client.post(endpoint["url"], json=endpoint["payload"])
+                    response.raise_for_status()
+                    results[endpoint["name"]] = response.json()
+                    logger.info(
+                        f"Successfully called {endpoint['name']} endpoint")
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to call {endpoint['name']} endpoint", error=str(e))
+                    results[endpoint["name"]] = {"error": str(e)}
 
-            # Recipient engagement stats (POST)
-            resp_eng = await client.post(f"{v2_base}/campaigns/reports/stats.recipient_engagement", json=params)
-            resp_eng.raise_for_status()
-            engagement_stats = resp_eng.json()
+            # Call v3 endpoints (GET requests)
+            for endpoint in v3_endpoints:
+                try:
+                    logger.info(f"Calling {endpoint['name']} endpoint")
+                    response = await client.get(endpoint["url"])
+                    response.raise_for_status()
+                    results[endpoint["name"]] = response.json()
+                    logger.info(
+                        f"Successfully called {endpoint['name']} endpoint")
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to call {endpoint['name']} endpoint", error=str(e))
+                    results[endpoint["name"]] = {"error": str(e)}
 
-            # Top link stats (POST)
-            resp_link = await client.post(f"{v2_base}/campaigns/reports/stats.top_link", json=params)
-            resp_link.raise_for_status()
-            link_stats = resp_link.json()
-
-        # Bounce stats (v3, GET)
-        v3_params = {"view": "aggregate", "group_by": "bounce_classification",
-                     "event": "bounce", "start_date": start_date, "end_date": end_date}
-
-        try:
-            async with httpx.AsyncClient(timeout=timeout, headers=headers) as client:
-                resp_bounce = await client.get(f"{v3_base}/campaigns/{journey_id}/stats", params=v3_params)
-                resp_bounce.raise_for_status()
-                bounce_stats = resp_bounce.json()
-        except Exception as e:
-            logger.warning("Failed to get bounce stats", error=str(e))
-            bounce_stats = {"stats": {}}
-
-        return {
-            "aggregate_stats": aggregate_stats,
-            "engagement_stats": engagement_stats,
-            "link_stats": link_stats,
-            "bounce_stats": bounce_stats
-        }
+        return results
 
 
 class InflectionMCPServer:
@@ -283,6 +350,24 @@ class InflectionMCPServer:
     def __init__(self):
         self.api_client = InflectionAPIClient()
         self.tools: List[Tool] = [
+            Tool(
+                name="inflection_login",
+                description="Login to Inflection.io with email and password",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "email": {
+                            "type": "string",
+                            "description": "Email address for Inflection.io account"
+                        },
+                        "password": {
+                            "type": "string",
+                            "description": "Password for Inflection.io account"
+                        }
+                    },
+                    "required": ["email", "password"]
+                }
+            ),
             Tool(
                 name="list_journeys",
                 description="List all marketing journeys from Inflection.io",
@@ -313,7 +398,7 @@ class InflectionMCPServer:
             ),
             Tool(
                 name="get_email_reports",
-                description="Get email performance reports for a specific journey",
+                description="Get comprehensive email performance reports for a specific journey from multiple Inflection.io endpoints including aggregate stats, engagement metrics, email clients, top links, and bounce analysis",
                 inputSchema={
                     "type": "object",
                     "properties": {
@@ -349,7 +434,13 @@ class InflectionMCPServer:
         )
 
         try:
-            if request.name == "list_journeys":
+            if request.name == "inflection_login":
+                result = await self.login(
+                    email=request.arguments.get("email", ""),
+                    password=request.arguments.get("password", "")
+                )
+                return CallToolResult(content=[TextContent(type="text", text=f"✅ Login successful!")])
+            elif request.name == "list_journeys":
                 result = await self.list_journeys(
                     page_size=request.arguments.get("page_size", 30),
                     page_number=request.arguments.get("page_number", 1),
@@ -385,6 +476,16 @@ class InflectionMCPServer:
             )
             return CallToolResult(content=[error_result])
 
+    async def login(self, email: str, password: str) -> TextContent:
+        """Handle login tool call."""
+        logger.info("Attempting login", email=email)
+        try:
+            await self.api_client.login(email, password)
+            return TextContent(type="text", text=f"✅ Login successful!")
+        except Exception as e:
+            logger.error("Login failed", error=str(e))
+            return TextContent(type="text", text=f"❌ Login failed: {str(e)}")
+
     async def list_journeys(self, page_size: int = 30, page_number: int = 1, search_keyword: str = "") -> TextContent:
         """List all marketing journeys from Inflection.io."""
         logger.info(
@@ -395,17 +496,21 @@ class InflectionMCPServer:
         )
 
         try:
+            # Use ensure_authenticated to trigger auto-login if needed
+            if not await self.api_client.ensure_authenticated():
+                return TextContent(
+                    type="text",
+                    text="❌ Not authenticated. Please use the 'inflection_login' tool first with your email and password."
+                )
+
             response = await self.api_client.get_journeys(
                 page_size=page_size,
                 page_number=page_number,
                 search_keyword=search_keyword
             )
 
-            logger.info("Raw API journey response", response=response)
-            journeys_data = response.get("records")
-
+            journeys_data = response.get("records", [])
             if not journeys_data or not isinstance(journeys_data, list):
-                # If the API response is not as expected, return the raw response for debugging
                 logger.warning(
                     "API did not return 'records' as expected", raw_response=response)
                 return TextContent(
@@ -413,56 +518,26 @@ class InflectionMCPServer:
                     text=f"❌ Unexpected API response. Could not find a list of journeys. Raw response: {json.dumps(response, indent=2)}"
                 )
 
-            # Format journey list
             journey_list = []
             for i, journey in enumerate(journeys_data, 1):
                 name = journey.get("name", "Unnamed Journey")
-                campaign_id = journey.get("campaign_id", "Unknown ID")
-                active = journey.get("active", False)
-                draft = journey.get("draft", False)
+                journey_id = journey.get(
+                    "id", journey.get("campaign_id", "Unknown ID"))
+                status = journey.get("status", "Unknown")
                 created_at = journey.get("created_at", "Unknown")
 
-                status = "Active" if active else "Inactive"
-                if draft:
-                    status = "Draft"
-
                 journey_list.append(
-                    f"{i}. **{name}** (ID: `{campaign_id}`)\n"
-                    f"   - Status: {status}\n"
-                    f"   - Created: {created_at}"
+                    f"{i}. **{name}** (ID: `{journey_id}`)\n   - Status: {status}\n   - Created: {created_at}"
                 )
 
-            # Add pagination info
-            total_count = response.get("total_count", len(journeys_data))
-            total_pages = response.get("total_pages", 1)
-
-            summary = (
-                f"📊 Found {len(journeys_data)} journeys (Page {page_number} of {total_pages}, "
-                f"Total: {total_count})"
-            )
-
+            total_count = len(journeys_data)
+            summary = f"📊 Found {total_count} journeys"
             if search_keyword:
                 summary += f" matching '{search_keyword}'"
 
             response_text = f"{summary}\n\n" + "\n\n".join(journey_list)
-
-            logger.info("Formatted journey list for response",
-                        response_text=response_text)
-
             return TextContent(type="text", text=response_text)
 
-        except ValueError as e:
-            logger.error("Authentication error", error=str(e))
-            # Check for missing credentials
-            if not INFLECTION_EMAIL or not INFLECTION_PASSWORD:
-                return TextContent(
-                    type="text",
-                    text="❌ Authentication error: Please set INFLECTION_EMAIL and INFLECTION_PASSWORD environment variables and restart the server."
-                )
-            return TextContent(
-                type="text",
-                text=f"❌ Authentication error: {str(e)}"
-            )
         except Exception as e:
             logger.error("Failed to list journeys", error=str(e))
             return TextContent(
@@ -471,7 +546,7 @@ class InflectionMCPServer:
             )
 
     async def get_email_reports(self, journey_id: str, start_date: Optional[str] = None, end_date: Optional[str] = None) -> TextContent:
-        """Get email performance reports for a specific journey."""
+        """Get comprehensive email performance reports for a specific journey."""
         logger.info(
             "Getting email reports",
             journey_id=journey_id,
@@ -480,99 +555,208 @@ class InflectionMCPServer:
         )
 
         try:
+            # Use ensure_authenticated to trigger auto-login if needed
+            if not await self.api_client.ensure_authenticated():
+                return TextContent(
+                    type="text",
+                    text="❌ Not authenticated. Please use the 'inflection_login' tool first with your email and password."
+                )
+
             reports = await self.api_client.get_email_reports(
                 journey_id=journey_id,
                 start_date=start_date,
                 end_date=end_date
             )
 
-            # Extract aggregate stats
-            aggregate_stats = reports.get(
-                "aggregate_stats", {}).get("stats", {})
-
-            # Build report summary
+            # Build comprehensive report
             report_parts = [
-                f"📧 **Email Report for Journey: {journey_id}**\n"
-            ]
+                f"📧 **Comprehensive Email Report for Journey: {journey_id}**\n"]
 
-            if start_date or end_date:
-                period = f"Period: {start_date or 'Start'} to {end_date or 'End'}"
-                report_parts.append(period + "\n")
+            # Date range
+            date_range = f"📅 **Date Range:** {start_date or 'Last 30 days'} to {end_date or 'Today'}\n"
+            report_parts.append(date_range)
 
-            # Aggregate statistics
-            report_parts.append("### 📊 Aggregate Statistics")
-            report_parts.append(
-                f"- **Total Emails**: {aggregate_stats.get('total_count', 0)}")
-            report_parts.append(
-                f"- **Delivered**: {aggregate_stats.get('delivered_count', 0)}")
-            report_parts.append(
-                f"- **Opens**: {aggregate_stats.get('total_open_count', 0)} (Unique: {aggregate_stats.get('unique_open_count', 0)})")
-            report_parts.append(
-                f"- **Clicks**: {aggregate_stats.get('total_click_count', 0)} (Unique: {aggregate_stats.get('unique_click_count_by_email', 0)})")
-            report_parts.append(
-                f"- **Bounces**: {aggregate_stats.get('bounce_count', 0)}")
-            report_parts.append(
-                f"- **Unsubscribes**: {aggregate_stats.get('unsub_count', 0)}")
-            report_parts.append(
-                f"- **Spam Reports**: {aggregate_stats.get('spamreport_count', 0)}")
-
-            # Calculate rates
-            total_count = aggregate_stats.get('total_count', 0)
-            if total_count > 0:
-                open_rate = (aggregate_stats.get(
-                    'unique_open_count', 0) / total_count) * 100
-                click_rate = (aggregate_stats.get(
-                    'unique_click_count_by_email', 0) / total_count) * 100
-                bounce_rate = (aggregate_stats.get(
-                    'bounce_count', 0) / total_count) * 100
-
-                report_parts.append(f"\n### 📈 Performance Rates")
-                report_parts.append(f"- **Open Rate**: {open_rate:.2f}%")
-                report_parts.append(f"- **Click Rate**: {click_rate:.2f}%")
-                report_parts.append(f"- **Bounce Rate**: {bounce_rate:.2f}%")
-
-            # Top links (if available)
-            link_stats = reports.get("link_stats", {}).get("stats", [])
-            if link_stats:
-                report_parts.append(f"\n### 🔗 Top Links")
-                for i, link in enumerate(link_stats[:5], 1):
-                    url = link.get("url", "Unknown URL")
-                    clicks = link.get("click_count", 0)
-                    report_parts.append(f"{i}. {url} - {clicks} clicks")
-
-            # Bounce statistics (if available)
-            bounce_stats = reports.get("bounce_stats", {}).get("stats", {})
-            if bounce_stats:
-                report_parts.append(f"\n### 📤 Bounce Statistics")
+            # Aggregate Statistics
+            agg = reports.get("aggregate_stats", {})
+            if "error" not in agg:
                 report_parts.append(
-                    f"- **Hard Bounces**: {bounce_stats.get('hard_bounce_count', 0)}")
+                    "\n### 📊 **Aggregate Performance Metrics**")
+                if isinstance(agg, dict):
+                    for key, value in agg.items():
+                        if isinstance(value, (int, float)):
+                            report_parts.append(
+                                f"- **{key.replace('_', ' ').title()}:** {value:,}")
+                        elif isinstance(value, dict):
+                            report_parts.append(
+                                f"- **{key.replace('_', ' ').title()}:**")
+                            for sub_key, sub_value in value.items():
+                                report_parts.append(
+                                    f"  - {sub_key.replace('_', ' ').title()}: {sub_value}")
+                else:
+                    report_parts.append(
+                        f"Raw data: {json.dumps(agg, indent=2)}")
+            else:
                 report_parts.append(
-                    f"- **Soft Bounces**: {bounce_stats.get('soft_bounce_count', 0)}")
+                    f"\n### 📊 **Aggregate Statistics:** Error - {agg['error']}")
+
+            # Recipient Engagement
+            eng = reports.get("recipient_engagement", {})
+            if "error" not in eng:
                 report_parts.append(
-                    f"- **Block Bounces**: {bounce_stats.get('block_bounce_count', 0)}")
+                    "\n### 👥 **Recipient Engagement Statistics**")
+                if isinstance(eng, dict):
+                    for key, value in eng.items():
+                        if isinstance(value, (int, float)):
+                            report_parts.append(
+                                f"- **{key.replace('_', ' ').title()}:** {value:,}")
+                        elif isinstance(value, list):
+                            report_parts.append(
+                                f"- **{key.replace('_', ' ').title()}:** {len(value)} records")
+                        else:
+                            report_parts.append(
+                                f"- **{key.replace('_', ' ').title()}:** {value}")
+                else:
+                    report_parts.append(
+                        f"Raw data: {json.dumps(eng, indent=2)}")
+            else:
+                report_parts.append(
+                    f"\n### 👥 **Recipient Engagement:** Error - {eng['error']}")
+
+            # Report Runs
+            runs = reports.get("report_runs_list", {})
+            if "error" not in runs:
+                report_parts.append("\n### 🏃‍♂️ **Report Runs Summary**")
+                if isinstance(runs, dict):
+                    for key, value in runs.items():
+                        if isinstance(value, (int, float)):
+                            report_parts.append(
+                                f"- **{key.replace('_', ' ').title()}:** {value:,}")
+                        elif isinstance(value, list):
+                            report_parts.append(
+                                f"- **{key.replace('_', ' ').title()}:** {len(value)} runs")
+                        else:
+                            report_parts.append(
+                                f"- **{key.replace('_', ' ').title()}:** {value}")
+                else:
+                    report_parts.append(
+                        f"Raw data: {json.dumps(runs, indent=2)}")
+            else:
+                report_parts.append(
+                    f"\n### 🏃‍♂️ **Report Runs:** Error - {runs['error']}")
+
+            # Top Email Clients (Click)
+            click_clients = reports.get("top_email_client_click", {})
+            if "error" not in click_clients:
+                report_parts.append("\n### 💻 **Top Email Clients (Clicks)**")
+                if isinstance(click_clients, dict):
+                    for key, value in click_clients.items():
+                        if isinstance(value, (int, float)):
+                            report_parts.append(
+                                f"- **{key.replace('_', ' ').title()}:** {value:,}")
+                        elif isinstance(value, list):
+                            report_parts.append(
+                                f"- **{key.replace('_', ' ').title()}:** {len(value)} clients")
+                        else:
+                            report_parts.append(
+                                f"- **{key.replace('_', ' ').title()}:** {value}")
+                else:
+                    report_parts.append(
+                        f"Raw data: {json.dumps(click_clients, indent=2)}")
+            else:
+                report_parts.append(
+                    f"\n### 💻 **Top Email Clients (Clicks):** Error - {click_clients['error']}")
+
+            # Top Email Clients (Open)
+            open_clients = reports.get("top_email_client_open", {})
+            if "error" not in open_clients:
+                report_parts.append("\n### 💻 **Top Email Clients (Opens)**")
+                if isinstance(open_clients, dict):
+                    for key, value in open_clients.items():
+                        if isinstance(value, (int, float)):
+                            report_parts.append(
+                                f"- **{key.replace('_', ' ').title()}:** {value:,}")
+                        elif isinstance(value, list):
+                            report_parts.append(
+                                f"- **{key.replace('_', ' ').title()}:** {len(value)} clients")
+                        else:
+                            report_parts.append(
+                                f"- **{key.replace('_', ' ').title()}:** {value}")
+                else:
+                    report_parts.append(
+                        f"Raw data: {json.dumps(open_clients, indent=2)}")
+            else:
+                report_parts.append(
+                    f"\n### 💻 **Top Email Clients (Opens):** Error - {open_clients['error']}")
+
+            # Top Links
+            top_links = reports.get("top_link_stats", {})
+            if "error" not in top_links:
+                report_parts.append("\n### 🔗 **Top Performing Links**")
+                if isinstance(top_links, dict):
+                    for key, value in top_links.items():
+                        if isinstance(value, (int, float)):
+                            report_parts.append(
+                                f"- **{key.replace('_', ' ').title()}:** {value:,}")
+                        elif isinstance(value, list):
+                            report_parts.append(
+                                f"- **{key.replace('_', ' ').title()}:** {len(value)} links")
+                        else:
+                            report_parts.append(
+                                f"- **{key.replace('_', ' ').title()}:** {value}")
+                else:
+                    report_parts.append(
+                        f"Raw data: {json.dumps(top_links, indent=2)}")
+            else:
+                report_parts.append(
+                    f"\n### 🔗 **Top Links:** Error - {top_links['error']}")
+
+            # Bounce Statistics
+            bounce_stats = reports.get("bounce_stats", {})
+            if "error" not in bounce_stats:
+                report_parts.append("\n### 📤 **Bounce Analysis**")
+                if isinstance(bounce_stats, dict):
+                    for key, value in bounce_stats.items():
+                        if isinstance(value, (int, float)):
+                            report_parts.append(
+                                f"- **{key.replace('_', ' ').title()}:** {value:,}")
+                        elif isinstance(value, list):
+                            report_parts.append(
+                                f"- **{key.replace('_', ' ').title()}:** {len(value)} classifications")
+                        else:
+                            report_parts.append(
+                                f"- **{key.replace('_', ' ').title()}:** {value}")
+                else:
+                    report_parts.append(
+                        f"Raw data: {json.dumps(bounce_stats, indent=2)}")
+            else:
+                report_parts.append(
+                    f"\n### 📤 **Bounce Analysis:** Error - {bounce_stats['error']}")
+
+            # Bounce Classifications
+            bounce_class = reports.get("bounce_classifications", {})
+            if "error" not in bounce_class:
+                report_parts.append("\n### 📤 **Bounce Classifications**")
+                if isinstance(bounce_class, dict):
+                    for key, value in bounce_class.items():
+                        if isinstance(value, (int, float)):
+                            report_parts.append(
+                                f"- **{key.replace('_', ' ').title()}:** {value:,}")
+                        elif isinstance(value, list):
+                            report_parts.append(
+                                f"- **{key.replace('_', ' ').title()}:** {len(value)} types")
+                        else:
+                            report_parts.append(
+                                f"- **{key.replace('_', ' ').title()}:** {value}")
+                else:
+                    report_parts.append(
+                        f"Raw data: {json.dumps(bounce_class, indent=2)}")
+            else:
+                report_parts.append(
+                    f"\n### 📤 **Bounce Classifications:** Error - {bounce_class['error']}")
 
             response_text = "\n".join(report_parts)
-
-            logger.info(
-                "Email reports retrieved successfully",
-                journey_id=journey_id,
-                total_emails=total_count
-            )
-
             return TextContent(type="text", text=response_text)
 
-        except ValueError as e:
-            logger.error("Authentication error", error=str(e))
-            # Check for missing credentials
-            if not INFLECTION_EMAIL or not INFLECTION_PASSWORD:
-                return TextContent(
-                    type="text",
-                    text="❌ Authentication error: Please set INFLECTION_EMAIL and INFLECTION_PASSWORD environment variables and restart the server."
-                )
-            return TextContent(
-                type="text",
-                text=f"❌ Authentication error: {str(e)}"
-            )
         except Exception as e:
             logger.error("Failed to get email reports", error=str(e))
             return TextContent(
@@ -598,7 +782,13 @@ async def main():
 
     @mcp_server.call_tool()
     async def call_tool_handler(name: str, arguments: dict):
-        if name == "list_journeys":
+        if name == "inflection_login":
+            content = await server.login(
+                email=arguments.get("email", ""),
+                password=arguments.get("password", "")
+            )
+            return [content]
+        elif name == "list_journeys":
             content = await server.list_journeys(
                 page_size=arguments.get("page_size", 30),
                 page_number=arguments.get("page_number", 1),

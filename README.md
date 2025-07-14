@@ -4,7 +4,7 @@ A simplified Model Context Protocol (MCP) server for Inflection.io marketing aut
 
 ## Features
 
-- **Authentication**: Automatic login using environment variables
+- **Authentication**: Manual login using MCP tools with email and password
 - **Journey Management**: List and search marketing journeys
 - **Email Analytics**: Get comprehensive email performance reports
 - **Token Management**: Automatic token refresh and expiration handling
@@ -22,9 +22,9 @@ A simplified Model Context Protocol (MCP) server for Inflection.io marketing aut
 pip install -r requirements.txt
 ```
 
-### 2. Configure Environment Variables
+### 2. Configure Environment Variables (Optional)
 
-Copy the example environment file and update with your credentials:
+Copy the example environment file and update with your credentials for automatic authentication:
 
 ```bash
 cp env.example .env
@@ -37,12 +37,14 @@ INFLECTION_EMAIL=your_email@inflection.io
 INFLECTION_PASSWORD=your_password
 ```
 
+**Note**: Environment variables are optional. You can also authenticate manually using the `inflection_login` MCP tool.
+
 ### 3. Test the Server
 
 Run the test script to verify everything works:
 
 ```bash
-python test_new_server.py
+python test_mcp_tools.py
 ```
 
 ### 4. Start the MCP Server
@@ -59,7 +61,7 @@ This server can be deployed as a standalone web service on Railway.app. See [RAI
 
 1. **Connect to Railway**: Go to [Railway.app](https://railway.app) and create a new project from your GitHub repository
 
-2. **Set Environment Variables**: Add these required variables in Railway dashboard:
+2. **Set Environment Variables** (Optional): Add these variables in Railway dashboard for automatic authentication:
    ```bash
    INFLECTION_EMAIL=your_email@inflection.io
    INFLECTION_PASSWORD=your_password
@@ -75,12 +77,12 @@ When deployed, the server provides these HTTP endpoints:
 
 - `GET /health` - Health check and authentication status
 - `GET /tools` - List available MCP tools
-- `POST /journeys` - List marketing journeys
-- `POST /reports` - Get email reports for a journey
 - `POST /mcp` - Full MCP protocol endpoint
 - `GET /sse` - SSE information
 - `GET /sse/events` - Real-time SSE updates
 - `POST /sse/trigger` - Trigger SSE events
+
+**Note**: Direct API endpoints (`/journeys` and `/reports`) have been removed. All data access must go through MCP tools.
 
 ### Local Web Server Testing
 
@@ -107,7 +109,7 @@ This server supports real-time integration with n8n using Server-Sent Events (SS
 
 ### Available SSE Events
 
-- `journey_update` - Real-time journey status updates (every 5 minutes)
+- `status_update` - Server status updates (every 5 minutes)
 - `health_check` - Server health status (every minute)
 - `error` - Error notifications
 - `connection` - Connection establishment
@@ -124,7 +126,25 @@ python deploy_test.py
 
 ## MCP Tools
 
-### 1. `list_journeys`
+### 1. `inflection_login`
+
+Authenticate with Inflection.io using email and password.
+
+**Parameters:**
+- `email` (required): Your Inflection.io account email
+- `password` (required): Your Inflection.io account password
+
+**Example:**
+```json
+{
+  "email": "your_email@inflection.io",
+  "password": "your_password"
+}
+```
+
+**Note**: You must use this tool first before accessing any other tools.
+
+### 2. `list_journeys`
 
 List all marketing journeys from your Inflection.io account.
 
@@ -142,7 +162,7 @@ List all marketing journeys from your Inflection.io account.
 }
 ```
 
-### 2. `get_email_reports`
+### 3. `get_email_reports`
 
 Get comprehensive email performance reports for a specific journey.
 
@@ -160,17 +180,20 @@ Get comprehensive email performance reports for a specific journey.
 }
 ```
 
-## Authentication
+## Authentication Flow
 
-The server uses environment variables for authentication:
+The server supports two authentication methods:
 
-- `INFLECTION_EMAIL`: Your Inflection.io account email
-- `INFLECTION_PASSWORD`: Your Inflection.io account password
+### Method 1: Manual Authentication (Recommended)
+1. Use the `inflection_login` MCP tool with your email and password
+2. The server will store your authentication token
+3. Use other tools as needed
+4. If the token expires, use `inflection_login` again
 
-The server automatically:
-- Logs in using these credentials on startup
-- Refreshes tokens when they expire
-- Handles authentication errors gracefully
+### Method 2: Environment Variables (Optional)
+1. Set `INFLECTION_EMAIL` and `INFLECTION_PASSWORD` environment variables
+2. The server will automatically authenticate on startup
+3. If authentication fails, you'll need to use the manual method
 
 ## API Endpoints
 
@@ -186,8 +209,8 @@ The server integrates with multiple Inflection.io API endpoints:
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `INFLECTION_EMAIL` | Your Inflection.io email | Required |
-| `INFLECTION_PASSWORD` | Your Inflection.io password | Required |
+| `INFLECTION_EMAIL` | Your Inflection.io email (optional) | None |
+| `INFLECTION_PASSWORD` | Your Inflection.io password (optional) | None |
 | `INFLECTION_API_BASE_URL_AUTH` | Auth API base URL | `https://auth.inflection.io/api/v1` |
 | `INFLECTION_API_BASE_URL_CAMPAIGN` | Campaign API v2 base URL | `https://campaign.inflection.io/api/v2` |
 | `INFLECTION_API_BASE_URL_CAMPAIGN_V3` | Campaign API v3 base URL | `https://campaign.inflection.io/api/v3` |
@@ -197,79 +220,14 @@ The server integrates with multiple Inflection.io API endpoints:
 
 The server includes comprehensive error handling:
 
-- **Authentication Errors**: Clear messages when login fails
-- **API Errors**: Graceful handling of API failures
-- **Network Errors**: Timeout and connection error handling
-- **Validation Errors**: Input validation with helpful messages
+- **Authentication Errors**: Clear messages when login fails or tokens expire
+- **HTTP Errors**: Specific handling for 401, 403, 404, and other status codes
+- **Network Errors**: Graceful handling of connection issues
+- **Validation Errors**: Input validation with helpful error messages
 
-## Logging
+### Common Error Messages
 
-The server uses structured logging with `structlog`:
-
-- **Log Level**: Configurable via `LOG_LEVEL` environment variable
-- **Structured Output**: JSON-formatted logs for easy parsing
-- **Context**: Request IDs and operation tracking
-- **Security**: No sensitive data logged (passwords, tokens)
-
-## Development
-
-### Running Tests
-
-```bash
-python test_new_server.py
-```
-
-### Code Structure
-
-```
-src/
-├── server_new.py          # Main MCP server (simplified)
-├── auth/                  # Authentication modules
-├── tools/                 # MCP tool implementations
-├── models/                # Data models
-├── utils/                 # Utility functions
-└── config/                # Configuration settings
-```
-
-### Adding New Tools
-
-1. Create a new tool function in `server_new.py`
-2. Add the tool to the `tools` list
-3. Add a handler in `handle_call_tool`
-4. Update the API client if needed
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Authentication Failed**
-   - Verify your email and password in `.env`
-   - Check that your Inflection.io account is active
-
-2. **API Errors**
-   - Check your internet connection
-   - Verify the API endpoints are accessible
-   - Check the logs for detailed error messages
-
-3. **Token Expiration**
-   - The server should automatically refresh tokens
-   - If issues persist, restart the server
-
-### Debug Mode
-
-Set `LOG_LEVEL=DEBUG` in your `.env` file for detailed logging:
-
-```bash
-LOG_LEVEL=DEBUG
-```
-
-## Security Considerations
-
-- **Environment Variables**: Never commit `.env` files to version control
-- **Token Storage**: Tokens are stored in memory only, not persisted
-- **Logging**: No sensitive data is logged
-- **HTTPS**: All API calls use HTTPS
-
-## License
-
-This project is licensed under the MIT License. 
+- `❌ Not authenticated. Please use the 'inflection_login' tool first` - You need to authenticate before using other tools
+- `❌ Authentication failed (401 Unauthorized)` - Invalid credentials or expired token
+- `❌ Access forbidden (403)` - Your account doesn't have permission
+- `❌ Journey not found (404)` - Invalid journey ID or no access to the journey 

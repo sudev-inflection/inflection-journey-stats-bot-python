@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Test script for the new Inflection.io MCP Server."""
 
-from server_new import api_client, list_journeys, get_email_reports
+from server_new import InflectionAPIClient, InflectionMCPServer
 import asyncio
 import os
 import sys
@@ -21,7 +21,8 @@ async def test_authentication():
         return False
 
     try:
-        # Test login
+        # Create API client and test login
+        api_client = InflectionAPIClient()
         await api_client.login(
             os.environ["INFLECTION_EMAIL"],
             os.environ["INFLECTION_PASSWORD"]
@@ -38,11 +39,13 @@ async def test_list_journeys():
     print("\n📋 Testing list_journeys...")
 
     try:
-        result = await list_journeys({
-            "page_size": 5,
-            "page_number": 1,
-            "search_keyword": ""
-        })
+        # Create MCP server instance
+        server = InflectionMCPServer()
+        result = await server.list_journeys(
+            page_size=5,
+            page_number=1,
+            search_keyword=""
+        )
         print("✅ list_journeys successful")
         print(f"Response preview: {result.text[:200]}...")
         return True
@@ -59,11 +62,13 @@ async def test_get_email_reports():
     test_journey_id = "67b9bd0a699f2660099ae910"
 
     try:
-        result = await get_email_reports({
-            "journey_id": test_journey_id,
-            "start_date": "2025-01-01",
-            "end_date": "2025-12-31"
-        })
+        # Create MCP server instance
+        server = InflectionMCPServer()
+        result = await server.get_email_reports(
+            journey_id=test_journey_id,
+            start_date="2025-01-01",
+            end_date="2025-12-31"
+        )
         print("✅ get_email_reports successful")
         print(f"Response preview: {result.text[:200]}...")
         return True

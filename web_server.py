@@ -49,6 +49,15 @@ async def lifespan(app: FastAPI):
     # Startup
     print("🚀 Starting Inflection.io MCP Server with SSE support...")
 
+    # Initialize authentication for the MCP server
+    try:
+        await mcp_server.api_client.ensure_authenticated()
+        print("✅ MCP server authentication initialized successfully")
+    except Exception as e:
+        print(f"⚠️  MCP server authentication failed: {e}")
+        print(
+            "   Users will need to use the inflection_login tool to authenticate manually")
+
     # Start background tasks
     background_tasks.append(asyncio.create_task(periodic_journey_updates()))
     background_tasks.append(asyncio.create_task(periodic_health_checks()))
@@ -85,17 +94,17 @@ mcp_server = InflectionMCPServer()
 
 # Pydantic models for request/response
 
+# Removed JourneyListRequest and EmailReportsRequest since direct endpoints are disabled
+# class JourneyListRequest(BaseModel):
+#     page_size: Optional[int] = 30
+#     page_number: Optional[int] = 1
+#     search_keyword: Optional[str] = ""
 
-class JourneyListRequest(BaseModel):
-    page_size: Optional[int] = 30
-    page_number: Optional[int] = 1
-    search_keyword: Optional[str] = ""
 
-
-class EmailReportsRequest(BaseModel):
-    journey_id: str
-    start_date: Optional[str] = None
-    end_date: Optional[str] = None
+# class EmailReportsRequest(BaseModel):
+#     journey_id: str
+#     start_date: Optional[str] = None
+#     end_date: Optional[str] = None
 
 
 class MCPRequest(BaseModel):
@@ -148,26 +157,22 @@ async def send_sse_event(event_type: str, data: Dict[str, Any]):
 
 async def periodic_journey_updates():
     """Periodically check for journey updates and send SSE events."""
+    # Disabled since direct endpoints are removed
+    # This function previously used the direct /journeys endpoint
+    # Now users should use MCP tools instead
     while True:
         try:
-            # Get current journeys
-            content = await mcp_server.list_journeys(page_size=10, page_number=1)
-
-            # Parse the content to extract journey data
-            # This is a simplified version - you might want to parse the actual response
-            journey_data = {
-                "type": "journey_update",
-                "timestamp": datetime.utcnow().isoformat(),
-                # Truncated for demo
-                "summary": f"Retrieved {content.text[:100]}..."
+            # Send a status message instead
+            status_data = {
+                "type": "status_update",
+                "message": "MCP tools are available for journey data access",
+                "timestamp": datetime.utcnow().isoformat()
             }
-
-            await send_sse_event("journey_update", journey_data)
-
+            await send_sse_event("status_update", status_data)
         except Exception as e:
             error_data = {
                 "type": "error",
-                "message": f"Journey update failed: {str(e)}",
+                "message": f"Status update failed: {str(e)}",
                 "timestamp": datetime.utcnow().isoformat()
             }
             await send_sse_event("error", error_data)
@@ -246,32 +251,33 @@ async def list_tools():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/journeys")
-async def list_journeys(request: JourneyListRequest):
-    """List marketing journeys."""
-    try:
-        content = await mcp_server.list_journeys(
-            page_size=request.page_size,
-            page_number=request.page_number,
-            search_keyword=request.search_keyword
-        )
-        return {"content": content.text}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+# Remove the direct API endpoints that bypass MCP tools
+# @app.post("/journeys")
+# async def list_journeys(request: JourneyListRequest):
+#     """List marketing journeys."""
+#     try:
+#         content = await mcp_server.list_journeys(
+#             page_size=request.page_size,
+#             page_number=request.page_number,
+#             search_keyword=request.search_keyword
+#         )
+#         return {"content": content.text}
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/reports")
-async def get_email_reports(request: EmailReportsRequest):
-    """Get email reports for a journey."""
-    try:
-        content = await mcp_server.get_email_reports(
-            journey_id=request.journey_id,
-            start_date=request.start_date,
-            end_date=request.end_date
-        )
-        return {"content": content.text}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+# @app.post("/reports")
+# async def get_email_reports(request: EmailReportsRequest):
+#     """Get email reports for a journey."""
+#     try:
+#         content = await mcp_server.get_email_reports(
+#             journey_id=request.journey_id,
+#             start_date=request.start_date,
+#             end_date=request.end_date
+#         )
+#         return {"content": content.text}
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/favicon.ico")
@@ -353,18 +359,10 @@ async def mcp_info():
 async def handle_mcp_request(request: Request):
     """Handle MCP protocol requests."""
     try:
-        # Debug: Log the raw request
-        body = await request.body()
-        print(f"DEBUG: Received POST to /mcp")
-        print(f"DEBUG: Headers: {dict(request.headers)}")
-        print(f"DEBUG: Body: {body.decode('utf-8') if body else 'No body'}")
-
         # Try to parse as JSON
         try:
             request_data = await request.json()
-            print(f"DEBUG: Parsed JSON: {request_data}")
         except Exception as e:
-            print(f"DEBUG: Failed to parse JSON: {e}")
             # Return a basic response for non-JSON requests
             return {
                 "jsonrpc": "2.0",
@@ -434,8 +432,6 @@ async def handle_mcp_request(request: Request):
         method = request_data.get('method')
         request_id = request_data.get('id')
         params = request_data.get('params', {})
-
-        print(f"Handling MCP request: {method}")
 
         if method == "initialize":
             response = {
@@ -572,7 +568,6 @@ async def handle_mcp_request(request: Request):
             }
 
     except Exception as e:
-        print(f"DEBUG: Exception in handle_mcp_request: {e}")
         import traceback
         traceback.print_exc()
         return {
@@ -686,8 +681,6 @@ def main():
     print("📋 Available endpoints:")
     print("   - GET  /health - Health check")
     print("   - GET  /tools - List available tools")
-    print("   - POST /journeys - List marketing journeys")
-    print("   - POST /reports - Get email reports")
     print("   - POST /mcp - MCP protocol endpoint")
     print("🔐 Using authentication from environment variables")
 
