@@ -33,4 +33,4 @@ RUN useradd --create-home --shell /bin/bash app && chown -R app:app /app
 EXPOSE 8000
 
 # Run the proper MCP server
-CMD ["python", "run_server.py", "--host", "0.0.0.0", "--port", "8000"] 
+CMD ["python", "web_server.py", "--host", "0.0.0.0", "--port", "8000"] 
