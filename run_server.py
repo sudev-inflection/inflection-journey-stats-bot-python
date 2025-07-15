@@ -60,11 +60,18 @@ async def run_tcp_server(host: str, port: int):
             )
             return [content]
         elif name == "get_email_reports":
-            content = await inflection_server.get_email_reports(
-                journey_id=arguments.get("journey_id", ""),
-                start_date=arguments.get("start_date"),
-                end_date=arguments.get("end_date")
-            )
+            journey_id = arguments.get("journey_id")
+            if not journey_id:
+                content = mcp.types.TextContent(
+                    type="text",
+                    text="❌ Journey ID is required. Please provide a valid journey_id parameter."
+                )
+            else:
+                content = await inflection_server.get_email_reports(
+                    journey_id=journey_id,
+                    start_date=arguments.get("start_date"),
+                    end_date=arguments.get("end_date")
+                )
             return [content]
         else:
             return [mcp.types.TextContent(type="text", text=f"❌ Unknown tool: {name}")]
@@ -132,11 +139,18 @@ async def run_tcp_server(host: str, port: int):
                             search_keyword=tool_args.get("search_keyword", "")
                         )
                     elif tool_name == "get_email_reports":
-                        content = await inflection_server.get_email_reports(
-                            journey_id=tool_args.get("journey_id", ""),
-                            start_date=tool_args.get("start_date"),
-                            end_date=tool_args.get("end_date")
-                        )
+                        journey_id = tool_args.get("journey_id")
+                        if not journey_id:
+                            content = mcp.types.TextContent(
+                                type="text",
+                                text="❌ Journey ID is required. Please provide a valid journey_id parameter."
+                            )
+                        else:
+                            content = await inflection_server.get_email_reports(
+                                journey_id=journey_id,
+                                start_date=tool_args.get("start_date"),
+                                end_date=tool_args.get("end_date")
+                            )
                     else:
                         content = mcp.types.TextContent(
                             type="text", text=f"❌ Unknown tool: {tool_name}")

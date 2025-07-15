@@ -19,6 +19,7 @@ from datetime import datetime
 import time
 import uuid
 from contextlib import asynccontextmanager
+import mcp.types
 
 # Load environment variables
 from dotenv import load_dotenv
@@ -528,11 +529,18 @@ async def handle_mcp_request(request: Request):
                     search_keyword=tool_args.get("search_keyword", "")
                 )
             elif tool_name == "get_email_reports":
-                content = await mcp_server.get_email_reports(
-                    journey_id=tool_args.get("journey_id", ""),
-                    start_date=tool_args.get("start_date"),
-                    end_date=tool_args.get("end_date")
-                )
+                journey_id = tool_args.get("journey_id")
+                if not journey_id:
+                    content = mcp.types.TextContent(
+                        type="text",
+                        text="❌ Journey ID is required. Please provide a valid journey_id parameter."
+                    )
+                else:
+                    content = await mcp_server.get_email_reports(
+                        journey_id=journey_id,
+                        start_date=tool_args.get("start_date"),
+                        end_date=tool_args.get("end_date")
+                    )
             else:
                 return {
                     "jsonrpc": "2.0",

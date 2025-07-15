@@ -560,11 +560,18 @@ class InflectionMCPServer:
                     search_keyword=request.arguments.get("search_keyword", "")
                 )
             elif request.name == "get_email_reports":
-                result = await self.get_email_reports(
-                    journey_id=request.arguments.get("journey_id", ""),
-                    start_date=request.arguments.get("start_date"),
-                    end_date=request.arguments.get("end_date")
-                )
+                journey_id = request.arguments.get("journey_id")
+                if not journey_id:
+                    result = TextContent(
+                        type="text",
+                        text="❌ Journey ID is required. Please provide a valid journey_id parameter."
+                    )
+                else:
+                    result = await self.get_email_reports(
+                        journey_id=journey_id,
+                        start_date=request.arguments.get("start_date"),
+                        end_date=request.arguments.get("end_date")
+                    )
             else:
                 logger.error("Unknown tool requested", tool_name=request.name)
                 result = TextContent(
@@ -928,11 +935,18 @@ async def main():
             )
             return [content]
         elif name == "get_email_reports":
-            content = await server.get_email_reports(
-                journey_id=arguments.get("journey_id", ""),
-                start_date=arguments.get("start_date"),
-                end_date=arguments.get("end_date")
-            )
+            journey_id = arguments.get("journey_id")
+            if not journey_id:
+                content = TextContent(
+                    type="text",
+                    text="❌ Journey ID is required. Please provide a valid journey_id parameter."
+                )
+            else:
+                content = await server.get_email_reports(
+                    journey_id=journey_id,
+                    start_date=arguments.get("start_date"),
+                    end_date=arguments.get("end_date")
+                )
             return [content]
         else:
             return [TextContent(type="text", text=f"❌ Unknown tool: {name}")]

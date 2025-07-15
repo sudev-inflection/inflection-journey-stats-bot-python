@@ -84,14 +84,21 @@ class InflectionMCPServer:
                     search_keyword=request.arguments.get("search_keyword", "")
                 )
             elif request.name == "get_email_reports":
-                result = await get_email_reports(
-                    request.arguments.get("journey_id", ""),
-                    self.auth_state,
-                    start_date=request.arguments.get("start_date"),
-                    end_date=request.arguments.get("end_date"),
-                    include_details=request.arguments.get(
-                        "include_details", True)
-                )
+                journey_id = request.arguments.get("journey_id")
+                if not journey_id:
+                    result = TextContent(
+                        type="text",
+                        text="❌ Journey ID is required. Please provide a valid journey_id parameter."
+                    )
+                else:
+                    result = await get_email_reports(
+                        journey_id,
+                        self.auth_state,
+                        start_date=request.arguments.get("start_date"),
+                        end_date=request.arguments.get("end_date"),
+                        include_details=request.arguments.get(
+                            "include_details", True)
+                    )
             else:
                 logger.error("Unknown tool requested", tool_name=request.name)
                 result = TextContent(

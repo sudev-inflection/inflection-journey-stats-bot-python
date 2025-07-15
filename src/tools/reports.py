@@ -75,10 +75,18 @@ async def get_email_reports(
 
     try:
         # Validate journey ID
-        if not validate_journey_id(journey_id):
+        if not journey_id:
+            logger.error("Journey ID is empty or None")
             return TextContent(
                 type="text",
-                text="❌ Invalid journey ID format"
+                text="❌ Journey ID is required. Please provide a valid journey_id parameter."
+            )
+
+        if not validate_journey_id(journey_id):
+            logger.error("Invalid journey ID format", journey_id=journey_id)
+            return TextContent(
+                type="text",
+                text=f"❌ Invalid journey ID format: {journey_id}"
             )
 
         # Check authentication
@@ -92,13 +100,30 @@ async def get_email_reports(
         # Fetch comprehensive report data
         async with InflectionAPIClient(auth_state) as client:
             # Get aggregate stats (main performance metrics)
-            aggregate_data = await client.get_aggregate_stats(journey_id, start_date, end_date)
+            try:
+                aggregate_data = await client.get_aggregate_stats(journey_id, start_date, end_date)
+            except Exception as e:
+                logger.error("Failed to get aggregate stats",
+                             journey_id=journey_id, error=str(e))
+                aggregate_data = {
+                    "error": f"Failed to fetch aggregate stats: {str(e)}"}
 
             # Get report runs list
-            runs_data = await client.get_report_runs_list(journey_id, start_date, end_date)
+            try:
+                runs_data = await client.get_report_runs_list(journey_id, start_date, end_date)
+            except Exception as e:
+                logger.error("Failed to get report runs list",
+                             journey_id=journey_id, error=str(e))
+                runs_data = {"error": f"Failed to fetch report runs: {str(e)}"}
 
             # Get recipient engagement stats (missing from current implementation)
-            recipient_engagement_data = await client.get_recipient_engagement_stats(journey_id, start_date, end_date)
+            try:
+                recipient_engagement_data = await client.get_recipient_engagement_stats(journey_id, start_date, end_date)
+            except Exception as e:
+                logger.error("Failed to get recipient engagement stats",
+                             journey_id=journey_id, error=str(e))
+                recipient_engagement_data = {
+                    "error": f"Failed to fetch recipient engagement: {str(e)}"}
 
             # Build main report
             report_text = f"""📊 **Comprehensive Email Performance Report** - Journey `{journey_id}`
@@ -167,6 +192,10 @@ async def get_email_reports(
 def _format_aggregate_stats(data: Dict[str, Any]) -> str:
     """Format aggregate statistics."""
     try:
+        # Check if this is an error response
+        if "error" in data:
+            return f"❌ **Aggregate Stats Error:** {data['error']}"
+
         stats = data.get('data', {})
 
         # Extract key metrics
@@ -194,12 +223,16 @@ def _format_aggregate_stats(data: Dict[str, Any]) -> str:
 
     except Exception as e:
         logger.warning("Failed to format aggregate stats", error=str(e))
-        return "Data unavailable"
+        return f"❌ **Aggregate Stats Error:** Failed to format data - {str(e)}"
 
 
 def _format_runs_summary(data: Dict[str, Any]) -> str:
     """Format report runs summary."""
     try:
+        # Check if this is an error response
+        if "error" in data:
+            return f"❌ **Report Runs Error:** {data['error']}"
+
         runs = data.get('data', {}).get('runs', [])
         total_count = data.get('data', {}).get('total_count', len(runs))
 
@@ -234,7 +267,7 @@ def _format_runs_summary(data: Dict[str, Any]) -> str:
 
     except Exception as e:
         logger.warning("Failed to format runs summary", error=str(e))
-        return "Data unavailable"
+        return f"❌ **Report Runs Error:** Failed to format data - {str(e)}"
 
 
 def _format_bounce_stats(data: Dict[str, Any]) -> str:
@@ -268,6 +301,10 @@ def _format_bounce_stats(data: Dict[str, Any]) -> str:
 def _format_recipient_engagement(data: Dict[str, Any]) -> str:
     """Format recipient engagement statistics."""
     try:
+        # Check if this is an error response
+        if "error" in data:
+            return f"❌ **Recipient Engagement Error:** {data['error']}"
+
         recipients = data.get('data', {}).get('recipients', [])
         total_count = data.get('data', {}).get('total_count', len(recipients))
 
@@ -295,7 +332,7 @@ def _format_recipient_engagement(data: Dict[str, Any]) -> str:
 
     except Exception as e:
         logger.warning("Failed to format recipient engagement", error=str(e))
-        return "Data unavailable"
+        return f"❌ **Recipient Engagement Error:** Failed to format data - {str(e)}"
 
 
 def _format_bounce_classifications(data: Dict[str, Any]) -> str:
