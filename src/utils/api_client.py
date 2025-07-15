@@ -174,16 +174,25 @@ class InflectionAPIClient:
         if not start_date:
             # Default to 30 days ago
             start_date = (datetime.now() - timedelta(days=30)
-                          ).strftime("%Y-%m-%dT%H:%M:%S%z")
+                          ).strftime("%Y-%m-%dT%H:%M:%S+05:30")
+        else:
+            # If start_date is provided in YYYY-MM-DD format, convert to full datetime
+            if len(start_date) == 10 and start_date.count('-') == 2:
+                start_date = f"{start_date}T00:00:00+05:30"
+            # If it already has timezone info, leave as is
+            elif not start_date.endswith('+05:30') and not start_date.endswith('Z'):
+                start_date = f"{start_date}+05:30"
+
         if not end_date:
             # Default to now
-            end_date = datetime.now().strftime("%Y-%m-%dT%H:%M:%S%z")
-
-        # Ensure timezone format matches API expectations
-        if not start_date.endswith('+05:30'):
-            start_date = f"{start_date}+05:30"
-        if not end_date.endswith('+05:30'):
-            end_date = f"{end_date}+05:30"
+            end_date = datetime.now().strftime("%Y-%m-%dT%H:%M:%S+05:30")
+        else:
+            # If end_date is provided in YYYY-MM-DD format, convert to full datetime
+            if len(end_date) == 10 and end_date.count('-') == 2:
+                end_date = f"{end_date}T23:59:59+05:30"
+            # If it already has timezone info, leave as is
+            elif not end_date.endswith('+05:30') and not end_date.endswith('Z'):
+                end_date = f"{end_date}+05:30"
 
         return start_date, end_date
 

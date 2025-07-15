@@ -97,6 +97,9 @@ async def get_email_reports(
             # Get report runs list
             runs_data = await client.get_report_runs_list(journey_id, start_date, end_date)
 
+            # Get recipient engagement stats (missing from current implementation)
+            recipient_engagement_data = await client.get_recipient_engagement_stats(journey_id, start_date, end_date)
+
             # Build main report
             report_text = f"""📊 **Comprehensive Email Performance Report** - Journey `{journey_id}`
 
@@ -106,7 +109,10 @@ async def get_email_reports(
 {_format_aggregate_stats(aggregate_data)}
 
 **📋 Report Runs Summary:**
-{_format_runs_summary(runs_data)}"""
+{_format_runs_summary(runs_data)}
+
+**👥 Recipient Engagement:**
+{_format_recipient_engagement(recipient_engagement_data)}"""
 
             # Add detailed breakdowns if requested
             if include_details:
@@ -118,6 +124,15 @@ async def get_email_reports(
                     logger.warning(
                         "Failed to fetch bounce stats", error=str(e))
                     report_text += "\n\n**📤 Bounce Analysis:** Data unavailable"
+
+                try:
+                    # Get bounce classifications (missing from current implementation)
+                    bounce_classifications = await client.get_bounce_classifications()
+                    report_text += f"\n\n**📤 Bounce Classifications:**\n{_format_bounce_classifications(bounce_classifications)}"
+                except Exception as e:
+                    logger.warning(
+                        "Failed to fetch bounce classifications", error=str(e))
+                    report_text += "\n\n**📤 Bounce Classifications:** Data unavailable"
 
                 try:
                     # Get top email clients
@@ -247,6 +262,61 @@ def _format_bounce_stats(data: Dict[str, Any]) -> str:
 
     except Exception as e:
         logger.warning("Failed to format bounce stats", error=str(e))
+        return "Data unavailable"
+
+
+def _format_recipient_engagement(data: Dict[str, Any]) -> str:
+    """Format recipient engagement statistics."""
+    try:
+        recipients = data.get('data', {}).get('recipients', [])
+        total_count = data.get('data', {}).get('total_count', len(recipients))
+
+        if not recipients:
+            return "No recipient engagement data available for the specified date range."
+
+        lines = [f"**Total Recipients:** {total_count}"]
+
+        # Show top engaged recipients (up to 10)
+        for i, recipient in enumerate(recipients[:10], 1):
+            email = recipient.get('email', 'Unknown')
+            name = recipient.get('name', 'Unknown')
+            opens = recipient.get('opens', 0)
+            clicks = recipient.get('clicks', 0)
+            bounces = recipient.get('bounces', 0)
+            unsubscribes = recipient.get('unsubscribes', 0)
+
+            lines.append(
+                f"{i}. **{email}** ({name}) - Opens: {opens}, Clicks: {clicks}, Bounces: {bounces}, Unsubscribes: {unsubscribes}")
+
+        if len(recipients) > 10:
+            lines.append(f"... and {len(recipients) - 10} more recipients")
+
+        return "\n".join(lines)
+
+    except Exception as e:
+        logger.warning("Failed to format recipient engagement", error=str(e))
+        return "Data unavailable"
+
+
+def _format_bounce_classifications(data: Dict[str, Any]) -> str:
+    """Format bounce classifications reference data."""
+    try:
+        classifications = data.get('data', [])
+
+        if not classifications:
+            return "No bounce classification data available."
+
+        lines = ["**Bounce Classification Types:**"]
+
+        for classification in classifications:
+            name = classification.get('name', 'Unknown')
+            description = classification.get('description', 'No description')
+            lines.append(f"• **{name}:** {description}")
+
+        return "\n".join(lines)
+
+    except Exception as e:
+        logger.warning("Failed to format bounce classifications", error=str(e))
         return "Data unavailable"
 
 
