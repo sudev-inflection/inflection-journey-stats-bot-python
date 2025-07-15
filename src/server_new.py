@@ -188,11 +188,116 @@ class InflectionAPIClient:
             )
             return False
 
+    async def _make_authenticated_request(self, method: str, url: str, **kwargs) -> httpx.Response:
+        """
+        Make an authenticated request with automatic retry on 401 errors.
+
+        Args:
+            method: HTTP method (GET, POST, etc.)
+            url: Full URL to request
+            **kwargs: Additional arguments to pass to httpx request
+
+        Returns:
+            httpx.Response object
+
+        Raises:
+            Exception: If authentication fails or request fails after retry
+        """
+        max_retries = 2
+        retry_count = 0
+
+        while retry_count <= max_retries:
+            try:
+                # Ensure we have valid authentication
+                if not await self.ensure_authenticated():
+                    raise ValueError("Authentication required")
+
+                # Make the request
+                async with httpx.AsyncClient(timeout=30.0, headers=self.campaign_client.headers) as client:
+                    if method.upper() == "GET":
+                        response = await client.get(url, **kwargs)
+                    elif method.upper() == "POST":
+                        response = await client.post(url, **kwargs)
+                    elif method.upper() == "PUT":
+                        response = await client.put(url, **kwargs)
+                    elif method.upper() == "DELETE":
+                        response = await client.delete(url, **kwargs)
+                    else:
+                        raise ValueError(f"Unsupported HTTP method: {method}")
+
+                # If successful, return the response
+                if response.status_code != 401:
+                    if retry_count > 0:
+                        logger.info(f"Request successful after {retry_count} retry attempts",
+                                    method=method, url=url, status_code=response.status_code)
+                    return response
+
+                # If we get a 401 and this is not the last retry, re-authenticate and try again
+                if retry_count < max_retries:
+                    logger.warning(f"Received 401 Unauthorized, attempting automatic re-authentication (attempt {retry_count + 1}/{max_retries})",
+                                   method=method, url=url)
+
+                    # Clear current auth state
+                    auth_state["access_token"] = None
+                    auth_state["refresh_token"] = None
+                    auth_state["expires_at"] = None
+                    auth_state["is_authenticated"] = False
+
+                    # Try to re-authenticate
+                    logger.info("Initiating automatic re-authentication...")
+                    if not await self.ensure_authenticated():
+                        logger.error("Automatic re-authentication failed")
+                        raise ValueError("Re-authentication failed")
+
+                    logger.info(
+                        "Automatic re-authentication successful, retrying request")
+                    retry_count += 1
+                    continue
+
+                # If we've exhausted retries, raise the 401 error
+                logger.error(f"Request failed after {max_retries} retry attempts",
+                             method=method, url=url, status_code=response.status_code)
+                response.raise_for_status()
+
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 401 and retry_count < max_retries:
+                    logger.warning(f"Received 401 Unauthorized, attempting automatic re-authentication (attempt {retry_count + 1}/{max_retries})",
+                                   method=method, url=url)
+
+                    # Clear current auth state
+                    auth_state["access_token"] = None
+                    auth_state["refresh_token"] = None
+                    auth_state["expires_at"] = None
+                    auth_state["is_authenticated"] = False
+
+                    # Try to re-authenticate
+                    logger.info("Initiating automatic re-authentication...")
+                    if not await self.ensure_authenticated():
+                        logger.error("Automatic re-authentication failed")
+                        raise ValueError("Re-authentication failed")
+
+                    logger.info(
+                        "Automatic re-authentication successful, retrying request")
+                    retry_count += 1
+                    continue
+                else:
+                    # Re-raise the error if it's not a 401 or we've exhausted retries
+                    logger.error(f"Request failed with status {e.response.status_code}",
+                                 method=method, url=url, error=str(e))
+                    raise
+            except Exception as e:
+                # For any other exception, don't retry
+                logger.error(f"Request failed with exception",
+                             method=method, url=url, error=str(e))
+                raise
+
+        # This should never be reached, but just in case
+        logger.error(f"Max retries exceeded for request",
+                     method=method, url=url)
+        raise Exception("Max retries exceeded")
+
     async def get_journeys(self, page_size: int = 30, page_number: int = 1, search_keyword: str = "") -> Dict[str, Any]:
         """Get list of marketing journeys."""
-        if not await self.ensure_authenticated():
-            raise ValueError("Authentication required")
-
         payload = {
             "page_size": page_size,
             "page_number": page_number,
@@ -204,17 +309,15 @@ class InflectionAPIClient:
             }
         }
 
-        response = await self.campaign_v1_client.post("/campaigns/campaign.list", json=payload)
-        response.raise_for_status()
+        response = await self._make_authenticated_request(
+            "POST",
+            f"{API_BASE_URL_CAMPAIGN_V1}/campaigns/campaign.list",
+            json=payload
+        )
         return response.json()
 
     async def get_email_reports(self, journey_id: str, start_date: Optional[str] = None, end_date: Optional[str] = None) -> Dict[str, Any]:
         """Get comprehensive email reports for a specific journey using all endpoints from test_api.py."""
-        if not await self.ensure_authenticated():
-            raise ValueError("Authentication required")
-
-        headers = self.campaign_client.headers.copy()
-        timeout = 30.0
         tz = pytz.timezone("Asia/Kolkata")
         now = datetime.now(tz)
         if not end_date:
@@ -227,6 +330,7 @@ class InflectionAPIClient:
         endpoints_to_call = [
             {
                 "name": "aggregate_stats",
+                "method": "POST",
                 "url": "https://campaign.inflection.io/api/v2/campaigns/reports/stats.aggregate",
                 "payload": {
                     "campaign_id": journey_id,
@@ -236,6 +340,7 @@ class InflectionAPIClient:
             },
             {
                 "name": "recipient_engagement",
+                "method": "POST",
                 "url": "https://campaign.inflection.io/api/v2/campaigns/reports/stats.recipient_engagement",
                 "payload": {
                     "campaign_id": journey_id,
@@ -253,6 +358,7 @@ class InflectionAPIClient:
             },
             {
                 "name": "report_runs_list",
+                "method": "POST",
                 "url": "https://campaign.inflection.io/api/v2/campaigns/reports/runs.list",
                 "payload": {
                     "campaign_id": journey_id,
@@ -265,6 +371,7 @@ class InflectionAPIClient:
             },
             {
                 "name": "top_email_client_click",
+                "method": "POST",
                 "url": "https://campaign.inflection.io/api/v2/campaigns/reports/stats.top_email_client.click",
                 "payload": {
                     "campaign_id": journey_id,
@@ -276,6 +383,7 @@ class InflectionAPIClient:
             },
             {
                 "name": "top_email_client_open",
+                "method": "POST",
                 "url": "https://campaign.inflection.io/api/v2/campaigns/reports/stats.top_email_client.open",
                 "payload": {
                     "campaign_id": journey_id,
@@ -287,6 +395,7 @@ class InflectionAPIClient:
             },
             {
                 "name": "top_link_stats",
+                "method": "POST",
                 "url": "https://campaign.inflection.io/api/v2/campaigns/reports/stats.top_link",
                 "payload": {
                     "campaign_id": journey_id,
@@ -302,44 +411,48 @@ class InflectionAPIClient:
         v3_endpoints = [
             {
                 "name": "bounce_stats",
+                "method": "GET",
                 "url": f"https://campaign.inflection.io/api/v3/campaigns/{journey_id}/stats?view=aggregate&group_by=bounce_classification&event=bounce&start_date={start_date.replace(':', '%3A').replace('+', '%2B')}&end_date={end_date.replace(':', '%3A').replace('+', '%2B')}"
             },
             {
                 "name": "bounce_classifications",
+                "method": "GET",
                 "url": "https://campaign.inflection.io/api/v3/campaigns/stats/bounce_classifications"
             }
         ]
 
         results = {}
 
-        async with httpx.AsyncClient(timeout=timeout, headers=headers) as client:
-            # Call v2 endpoints (POST requests)
-            for endpoint in endpoints_to_call:
-                try:
-                    logger.info(f"Calling {endpoint['name']} endpoint")
-                    response = await client.post(endpoint["url"], json=endpoint["payload"])
-                    response.raise_for_status()
-                    results[endpoint["name"]] = response.json()
-                    logger.info(
-                        f"Successfully called {endpoint['name']} endpoint")
-                except Exception as e:
-                    logger.warning(
-                        f"Failed to call {endpoint['name']} endpoint", error=str(e))
-                    results[endpoint["name"]] = {"error": str(e)}
+        # Call v2 endpoints (POST requests)
+        for endpoint in endpoints_to_call:
+            try:
+                logger.info(f"Calling {endpoint['name']} endpoint")
+                response = await self._make_authenticated_request(
+                    endpoint["method"],
+                    endpoint["url"],
+                    json=endpoint["payload"]
+                )
+                results[endpoint["name"]] = response.json()
+                logger.info(f"Successfully called {endpoint['name']} endpoint")
+            except Exception as e:
+                logger.warning(
+                    f"Failed to call {endpoint['name']} endpoint", error=str(e))
+                results[endpoint["name"]] = {"error": str(e)}
 
-            # Call v3 endpoints (GET requests)
-            for endpoint in v3_endpoints:
-                try:
-                    logger.info(f"Calling {endpoint['name']} endpoint")
-                    response = await client.get(endpoint["url"])
-                    response.raise_for_status()
-                    results[endpoint["name"]] = response.json()
-                    logger.info(
-                        f"Successfully called {endpoint['name']} endpoint")
-                except Exception as e:
-                    logger.warning(
-                        f"Failed to call {endpoint['name']} endpoint", error=str(e))
-                    results[endpoint["name"]] = {"error": str(e)}
+        # Call v3 endpoints (GET requests)
+        for endpoint in v3_endpoints:
+            try:
+                logger.info(f"Calling {endpoint['name']} endpoint")
+                response = await self._make_authenticated_request(
+                    endpoint["method"],
+                    endpoint["url"]
+                )
+                results[endpoint["name"]] = response.json()
+                logger.info(f"Successfully called {endpoint['name']} endpoint")
+            except Exception as e:
+                logger.warning(
+                    f"Failed to call {endpoint['name']} endpoint", error=str(e))
+                results[endpoint["name"]] = {"error": str(e)}
 
         return results
 
@@ -470,9 +583,23 @@ class InflectionMCPServer:
                 error=str(e),
                 exc_info=True
             )
+
+            # Provide user-friendly error messages
+            error_message = str(e)
+
+            # Handle specific authentication errors
+            if "401" in error_message or "Unauthorized" in error_message:
+                error_message = "Authentication failed. Please try using the 'inflection_login' tool again with your credentials."
+            elif "Authentication required" in error_message:
+                error_message = "Please use the 'inflection_login' tool first with your email and password."
+            elif "Re-authentication failed" in error_message:
+                error_message = "Unable to automatically re-authenticate. Please use the 'inflection_login' tool again with your credentials."
+            elif "Max retries exceeded" in error_message:
+                error_message = "Request failed after multiple attempts. Please try again or use the 'inflection_login' tool to refresh your authentication."
+
             error_result = TextContent(
                 type="text",
-                text=f"❌ Error executing {request.name}: {str(e)}"
+                text=f"❌ Error executing {request.name}: {error_message}"
             )
             return CallToolResult(content=[error_result])
 
@@ -496,13 +623,6 @@ class InflectionMCPServer:
         )
 
         try:
-            # Use ensure_authenticated to trigger auto-login if needed
-            if not await self.api_client.ensure_authenticated():
-                return TextContent(
-                    type="text",
-                    text="❌ Not authenticated. Please use the 'inflection_login' tool first with your email and password."
-                )
-
             response = await self.api_client.get_journeys(
                 page_size=page_size,
                 page_number=page_number,
@@ -522,12 +642,31 @@ class InflectionMCPServer:
             for i, journey in enumerate(journeys_data, 1):
                 name = journey.get("name", "Unnamed Journey")
                 journey_id = journey.get(
-                    "id", journey.get("campaign_id", "Unknown ID"))
-                status = journey.get("status", "Unknown")
+                    "campaign_id", journey.get("id", "Unknown ID"))
                 created_at = journey.get("created_at", "Unknown")
+                updated_at = journey.get("updated_at", "Unknown")
+
+                # Calculate status based on active and draft fields
+                active = journey.get("active", False)
+                draft = journey.get("draft", False)
+                if draft:
+                    status = "Draft"
+                elif active:
+                    status = "Active"
+                else:
+                    status = "Inactive"
+
+                # Get creator information
+                created_by = journey.get("created_by", {})
+                creator_name = created_by.get(
+                    "name", "Unknown") if created_by else "Unknown"
 
                 journey_list.append(
-                    f"{i}. **{name}** (ID: `{journey_id}`)\n   - Status: {status}\n   - Created: {created_at}"
+                    f"{i}. **{name}** (ID: `{journey_id}`)\n"
+                    f"   - Status: {status}\n"
+                    f"   - Created: {created_at}\n"
+                    f"   - Updated: {updated_at}\n"
+                    f"   - Created by: {creator_name}"
                 )
 
             total_count = len(journeys_data)
@@ -555,13 +694,6 @@ class InflectionMCPServer:
         )
 
         try:
-            # Use ensure_authenticated to trigger auto-login if needed
-            if not await self.api_client.ensure_authenticated():
-                return TextContent(
-                    type="text",
-                    text="❌ Not authenticated. Please use the 'inflection_login' tool first with your email and password."
-                )
-
             reports = await self.api_client.get_email_reports(
                 journey_id=journey_id,
                 start_date=start_date,

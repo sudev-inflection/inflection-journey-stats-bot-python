@@ -21,7 +21,9 @@ class InflectionAPIClient:
         self.auth_state = auth_state
         self.auth_base_url = settings.inflection_api_base_url_auth.rstrip('/')
         self.campaign_base_url = settings.inflection_api_base_url_campaign.rstrip(
-            '/')
+            '/')  # v1 for journeys
+        self.campaign_v2_base_url = settings.inflection_api_base_url_campaign_v2.rstrip(
+            '/')  # v2 for reports
         self.campaign_v3_base_url = settings.inflection_api_base_url_campaign_v3.rstrip(
             '/')
         self.timeout = settings.api_timeout / 1000  # Convert ms to seconds
@@ -192,7 +194,7 @@ class InflectionAPIClient:
         if not self.auth_state.is_authenticated():
             raise ValueError("Authentication required")
 
-        url = f"{self.campaign_base_url}{settings.inflection_reports_runs_list}"
+        url = f"{self.campaign_v2_base_url}{settings.inflection_reports_runs_list}"
         start_date, end_date = self._prepare_date_range(start_date, end_date)
 
         payload = {
@@ -224,7 +226,7 @@ class InflectionAPIClient:
         if not self.auth_state.is_authenticated():
             raise ValueError("Authentication required")
 
-        url = f"{self.campaign_base_url}{settings.inflection_reports_recipient_engagement}"
+        url = f"{self.campaign_v2_base_url}{settings.inflection_reports_recipient_engagement}"
         start_date, end_date = self._prepare_date_range(start_date, end_date)
 
         payload = {
@@ -260,7 +262,7 @@ class InflectionAPIClient:
         if not self.auth_state.is_authenticated():
             raise ValueError("Authentication required")
 
-        url = f"{self.campaign_base_url}{settings.inflection_reports_aggregate}"
+        url = f"{self.campaign_v2_base_url}{settings.inflection_reports_aggregate}"
         start_date, end_date = self._prepare_date_range(start_date, end_date)
 
         payload = {
@@ -338,7 +340,7 @@ class InflectionAPIClient:
         if not self.auth_state.is_authenticated():
             raise ValueError("Authentication required")
 
-        url = f"{self.campaign_base_url}{settings.inflection_reports_top_email_client_click}"
+        url = f"{self.campaign_v2_base_url}{settings.inflection_reports_top_email_client_click}"
         start_date, end_date = self._prepare_date_range(start_date, end_date)
 
         payload = {
@@ -369,7 +371,7 @@ class InflectionAPIClient:
         if not self.auth_state.is_authenticated():
             raise ValueError("Authentication required")
 
-        url = f"{self.campaign_base_url}{settings.inflection_reports_top_email_client_open}"
+        url = f"{self.campaign_v2_base_url}{settings.inflection_reports_top_email_client_open}"
         start_date, end_date = self._prepare_date_range(start_date, end_date)
 
         payload = {
@@ -400,7 +402,7 @@ class InflectionAPIClient:
         if not self.auth_state.is_authenticated():
             raise ValueError("Authentication required")
 
-        url = f"{self.campaign_base_url}{settings.inflection_reports_top_link}"
+        url = f"{self.campaign_v2_base_url}{settings.inflection_reports_top_link}"
         start_date, end_date = self._prepare_date_range(start_date, end_date)
 
         payload = {
@@ -429,7 +431,7 @@ class InflectionAPIClient:
         if not self.auth_state.is_authenticated():
             raise ValueError("Authentication required")
 
-        url = f"{self.campaign_base_url}{settings.inflection_reports_runs_stats}"
+        url = f"{self.campaign_v2_base_url}{settings.inflection_reports_runs_stats}"
 
         payload = {
             "campaign_id": campaign_id,

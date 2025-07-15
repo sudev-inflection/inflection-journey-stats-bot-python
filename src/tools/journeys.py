@@ -76,7 +76,7 @@ async def list_journeys(
             )
 
             # Parse journeys from response
-            journeys_data = response.get("journeys", [])
+            journeys_data = response.get("records", [])
             journeys = []
 
             for journey_data in journeys_data:
@@ -100,20 +100,22 @@ async def list_journeys(
             # Format journey list
             journey_list = []
             for i, journey in enumerate(journeys, 1):
-                status = journey.status or "Unknown"
+                status = journey.status
                 created = journey.created_at or "Unknown"
                 updated = journey.updated_at or "Unknown"
+                creator = journey.created_by.name if journey.created_by else "Unknown"
 
                 journey_list.append(
                     f"{i}. **{journey.name}** (ID: `{journey.id}`)\n"
                     f"   - Status: {status}\n"
                     f"   - Created: {created}\n"
-                    f"   - Updated: {updated}"
+                    f"   - Updated: {updated}\n"
+                    f"   - Created by: {creator}"
                 )
 
             # Add pagination info
-            total_count = response.get("total_count", len(journeys))
-            total_pages = response.get("total_pages", 1)
+            total_count = response.get("record_count", len(journeys))
+            total_pages = response.get("page_count", 1)
 
             summary = (
                 f"📊 Found {len(journeys)} journeys (Page {page_number} of {total_pages}, "

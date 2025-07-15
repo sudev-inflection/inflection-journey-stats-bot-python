@@ -15,8 +15,12 @@ class Settings(BaseSettings):
         description="Inflection.io Auth API base URL"
     )
     inflection_api_base_url_campaign: str = Field(
+        default="https://campaign.inflection.io/api/v1",
+        description="Inflection.io Campaign API base URL (v1) - for journeys"
+    )
+    inflection_api_base_url_campaign_v2: str = Field(
         default="https://campaign.inflection.io/api/v2",
-        description="Inflection.io Campaign API base URL (v2)"
+        description="Inflection.io Campaign API base URL (v2) - for reports"
     )
     inflection_api_base_url_campaign_v3: str = Field(
         default="https://campaign.inflection.io/api/v3",
